@@ -139,10 +139,20 @@ function SPRITES() {
     return true;
   }
   // Object code k (see engine.js) at tile position (fx, fy), fractional while animating.
+  // Code 16 (SUNK) is a crate sunk in water, drawn half under; 16 + k is object k standing on a sunk crate.
   const OBJ = { 1: "crate", 2: "door_h", 3: "door_v", 5: "ball1", 6: "ball2", 7: "ball3", 8: "ball4", 9: "snowwall" };
+  const SUNK = 16, SUNK_CUT = 4, SUNK_LOWER = 1;   // sunk crate: rows from SUNK_CUT down are under water, SUNK_LOWER px lower
   function obj(ctx, k, fx, fy) {
+    if (k & SUNK) { drawSubmerged(ctx, "crate", fx * 8, fy * 8, false, SUNK_CUT, SUNK_LOWER); k &= 15; if (!k) return; }
     if (k === 4) { const x = Math.round(fx), y = Math.round(fy); draw(ctx, variant("snow", x, y), fx * 8, fy * 8, (hash(x, y, 7) & 1) === 1); return; }
     draw(ctx, OBJ[k], fx * 8, fy * 8);
+  }
+  // Objects of one cell while a move animates: sunk crates as they were before the move (prev), the piece on
+  // top from the current state unless it is moving (skip holds the cells of moving pieces, drawn separately).
+  function cell(ctx, cur, prev, skip, g, x, y) {
+    if ((prev || cur)[g] & SUNK) obj(ctx, SUNK, x, y);
+    const k = cur[g] & 15;
+    if (k && !(skip && skip.has(g))) obj(ctx, k, x, y);
   }
   // Squirrel: dir 0 up, 1 right, 2 down, 3 left (right mirrored); frame 0 standing, 1-3 running.
   // inWater: half submerged (bottom half tinted, 1 px lower).
@@ -151,5 +161,5 @@ function SPRITES() {
     if (inWater) drawSubmerged(ctx, name, fx * 8, fy * 8, dir === 3, 4, 1);
     else draw(ctx, name, fx * 8, fy * 8, dir === 3);
   }
-  return { draw, drawSubmerged, drawTurned, tile, reeds, splash, isAnimated, obj, player, variant, onReady(f) { listeners.push(f); if (ready) f(); } };
+  return { draw, drawSubmerged, drawTurned, tile, reeds, splash, isAnimated, obj, cell, player, variant, onReady(f) { listeners.push(f); if (ready) f(); } };
 }

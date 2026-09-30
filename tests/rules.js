@@ -60,4 +60,24 @@ function tw(name, lines, d, expectP, expectSplash) {
 }
 tw('walk into water: splash, stay', ['@≈'], R, 0, 1);
 tw('slide on ice into water: splash, stop on ice', ['@~~≈'], R, 2, 3);
-tw('crate cannot be pushed into water', ['@c≈'], R, 'x', '-');
+
+// sequences of moves; the map shows objects, then sunk crates as #, then terrain; splashes lists splash cells
+function ts(name, lines, dirs, expect) {
+  let p = -1; lines = lines.map((l, y) => { const x = [...l].indexOf('@'); if (x >= 0) { p = y * [...l].length + x; return l.replace('@', '_'); } return l; });
+  const l = lvl(lines); const L = E.build(l.W, l.H, l.terr, l.obj);
+  let obj = L.obj; const sp = [];
+  for (const d of dirs) { const r = E.step(L, p, obj, d); if (!r) continue; p = r.p; obj = r.obj; for (const s of r.splashes) sp.push(s.cell); }
+  let out = '';
+  for (let i = 0; i < L.N; i++) out += i === p ? '@' : (obj[i] & 15) ? E.CH[obj[i] & 15] : (obj[i] & E.SUNK) ? '#' : L.terr[i];
+  out += ' splashes=' + sp.join(',');
+  console.log(name.padEnd(44), out + (out === expect ? ' ✓' : ' ✗ expected ' + expect));
+}
+ts('crate pushed into water sinks', ['@c≈≈'], [R], '_@#≈ splashes=2');
+ts('walk onto a sunk crate', ['@c≈≈'], [R, R], '__@≈ splashes=2');
+ts('push a crate onto a sunk crate', ['@cc≈_'], [R, R], '__@c_ splashes=3');
+ts('second crate sinks past the first', ['@cc≈≈'], [R, R, R], '___@# splashes=3,4');
+ts('snowball pushed into water is gone', ['@3≈_'], [R], '_@≈_ splashes=2');
+ts('snow pile pushed into water is gone', ['@*≈_'], [R], '_@≈_ splashes=2');
+ts('small ball rolls onto a sunk crate', ['@c≈_', '__1_', '____'], [R, D, D, R, 0], '__1___@_____ splashes=2');
+ts('crate slides off ice into water', ['@c~~≈≈'], [R], '_@~~#≈ splashes=4');
+ts('door cannot enter water', ['@=≈'], [R], '@=≈ splashes=');

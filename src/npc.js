@@ -31,16 +31,17 @@ function NPCS(E, SP) {
     let playerCell = -1;
     const at = c => [c % W, (c / W) | 0];
     const dist = (a, b) => { const [ax, ay] = at(a), [bx, by] = at(b); return Math.abs(ax - bx) + Math.abs(ay - by); };
-    const isWater = c => c >= 0 && L.water[c] === 1;
+    const none = new Uint8Array(L.N), objs = () => getObj() || none;   // objects may not exist yet while NPCs are created
+    const isWater = c => c >= 0 && L.water[c] === 1 && !(objs()[c] & E.SUNK);   // a sunk crate counts as land
     const occupied = (c, self) => npcs.some(n => n !== self && (n.cell === c || (n.move && n.move.to === c)));
     // can a frog be on this tile? (land it can stand on, or open water)
     function blocked(c, self) {
       if (c < 0) return true;
       const t = L.terr[c];
       if (t === "w" || t === "o" || t === "%" || t === "&") return true;
-      if (getObj()[c]) return true;
+      if (objs()[c] & 15) return true;
       if (c === playerCell || occupied(c, self)) return true;
-      return !(isWater(c) || E.WALK[L.eff[c]]);
+      return !(isWater(c) || E.WALK[L.eff[c]] || (objs()[c] & E.SUNK));
     }
     // cells in a straight line from c, stopping before the first blocked one
     function line(c, d, max, self) {
@@ -152,7 +153,7 @@ function NPCS(E, SP) {
     // Then it picks a straight line nearby that crosses no walls, flies to one end, zips back and forth
     // along it 1-3 times, and returns home to sit again. It ignores the player.
     // -------------------------------------------------------------------------------------------
-    const DFLY = { SIT_MS: [3000, 9000], SPEED: 3.5, RANGE: 3, LINE: [1.5, 3.5], PASSES: [1, 3], LIFT: 3 };
+    const DFLY = { SIT_MS: [3000, 9000], SPEED: 9, RANGE: 3, LINE: [5, 9], PASSES: [1, 3], LIFT: 3 };
     const open = (x, y) => {
       const tx = Math.round(x), ty = Math.round(y);
       if (tx < 0 || ty < 0 || tx >= W || ty >= L.H) return false;
@@ -162,9 +163,9 @@ function NPCS(E, SP) {
     const clearLine = (a, b) => { const n = Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) * 4) + 1; for (let i = 0; i <= n; i++) if (!open(a[0] + (b[0] - a[0]) * i / n, a[1] + (b[1] - a[1]) * i / n)) return false; return true; };
     function planFlight(f) {
       const [hx, hy] = at(f.home);
-      for (let tries = 0; tries < 40; tries++) {
+      for (let tries = 0; tries < 80; tries++) {   // long lines don't always fit: later tries use shorter ones
         const A = [hx + rand(-DFLY.RANGE, DFLY.RANGE), hy + rand(-DFLY.RANGE, DFLY.RANGE)];
-        const ang = rand(0, Math.PI * 2), len = rand(...DFLY.LINE);
+        const ang = rand(0, Math.PI * 2), len = rand(...DFLY.LINE) * Math.max(0.3, 1 - tries / 80);
         const B = [A[0] + Math.cos(ang) * len, A[1] + Math.sin(ang) * len];
         if (!clearLine([f.x, f.y], A) || !clearLine(A, B) || !clearLine(A, [hx, hy])) continue;
         const path = [A];

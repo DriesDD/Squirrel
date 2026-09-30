@@ -80,11 +80,14 @@ with the Frog and Dragonfly tools in the designer (room mode; click an NPC again
   swim away (or dive) when you come within 3 tiles in the water. Tuning: the `FROG` object in `src/npc.js`.
 - Dragonflies remember their home tile (put them on reeds). They sit near the top of it for a while, then pick a
   short line nearby that doesn't cross a wall, fly to its start, dart back and forth along it 1–3 times, and return
-  to sit. They fly above everything, including the reeds. Tuning: the `DFLY` object in `src/npc.js`.
+  to sit (their lines are 5–9 tiles long when there is room, shorter when there isn't). They fly above everything, including the reeds. Tuning: the `DFLY` object in `src/npc.js`.
 
 A new kind of NPC is a new entry in `BEHAVIOURS` there.
 
 ## Water
 
-Nothing can be pushed into water. When the squirrel walks or slides into it, it splashes in and walks back out to the
-tile it came from.
+When the squirrel walks or slides into water, it splashes in and walks back out to the tile it came from.
+A snowball or snow pile pushed (or sliding) into water splashes and is gone. A crate splashes and sinks halfway: from
+then on that tile works like floor, so you can walk on it and push crates and snowballs onto it (a crate pushed off
+it into more water sinks there too). Doors can't go into water. In the engine a sunk crate is bit 16 of the object
+code, so a tile can hold a sunk crate with another object on top; saves keep it.

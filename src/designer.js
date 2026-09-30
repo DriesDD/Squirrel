@@ -152,7 +152,7 @@
     const list = play.splashes || [];
     for (let i = list.length - 1; i >= 0; i--) if (!SP.splash(bctx, list[i].cell % L.W - ox, ((list[i].cell / L.W) | 0) - oy, now - list[i].t0)) list.splice(i, 1);
   }
-  const playerWet = (L, px, py) => L.water[Math.round(py) * L.W + Math.round(px)] === 1;
+  const playerWet = (L, obj, px, py) => { const c = Math.round(py) * L.W + Math.round(px); return L.water[c] === 1 && !(obj[c] & E.SUNK); };
   function drawObj(ctx, k, fx, fy) { SP.obj(ctx, k, fx, fy); }
 
   function render() {
@@ -171,15 +171,12 @@
     const live = a && el < a.dur;
     const st = live ? E.animAt(L, a.data, el < a.first ? el / a.first : 1 + (el - a.first) / a.slide) : null;
     const skip = new Set(live ? a.data.ents.map(e => e.end) : []);
-    for (let i = 0; i < obj.length; i++) {
-      if (!obj[i] || skip.has(i)) continue;
-      drawObj(bctx, obj[i], i % L.W, (i / L.W) | 0, TS);
-    }
+    for (let i = 0; i < obj.length; i++) if (obj[i]) SP.cell(bctx, obj, live ? a.prev : null, skip, i, i % L.W, (i / L.W) | 0);
     if (live) for (const e of st.ents) drawObj(bctx, e.k, e.x, e.y, TS);
     if (mode === "play") {
       const [x, y] = live ? st.player : [play.p % L.W, (play.p / L.W) | 0];
       const walking = live && st.playerDir >= 0;
-      SP.player(bctx, x, y, walking ? st.playerDir : play.facing, walking ? 1 + (Math.floor(now / 90) % 3) : 0, playerWet(L, x, y));
+      SP.player(bctx, x, y, walking ? st.playerDir : play.facing, walking ? 1 + (Math.floor(now / 90) % 3) : 0, playerWet(L, play.obj, x, y));
       for (let y = 0; y < L.H; y++) for (let x = 0; x < L.W; x++) SP.reeds(bctx, L, y * L.W + x, x, y, "front");
     } else {
       if (kind === "room") drawRoomNPCs();
@@ -369,9 +366,11 @@
     const first = r.crates >= 5 ? 620 : r.crates === 4 ? 300 : 95, slide = 60;
     const dur = first + Math.max(0, r.anim.T - 1) * slide;
     const t0 = performance.now();
-    play.anim = { data: r.anim, t0, dur, first, slide };
+    play.anim = { data: r.anim, t0, dur, first, slide, prev: play.obj };
     play.facing = d;
-    if (r.splash) { const t = r.splash.t; (play.splashes ||= []).push({ cell: r.splash.cell, t0: t0 + (t < 1 ? t * first : first + (t - 1) * slide) }); play.facing = (d + 2) % 4; }
+    const when = t => t0 + (t < 1 ? t * first : first + (t - 1) * slide);
+    for (const s of r.splashes) (play.splashes ||= []).push({ cell: s.cell, t0: when(s.t) });
+    if (r.splash) { (play.splashes ||= []).push({ cell: r.splash.cell, t0: when(r.splash.t) }); play.facing = (d + 2) % 4; }
     play.busyUntil = performance.now() + dur;
     play.p = r.p; play.obj = r.obj; play.steps++;
     if (r.changed) play.pushes++;
@@ -957,12 +956,12 @@
     const a = play.anim, el = a ? now - a.t0 : 0, live = a && el < a.dur;
     const st = live ? E.animAt(L, a.data, el < a.first ? el / a.first : 1 + (el - a.first) / a.slide) : null;
     const skip = new Set(live ? a.data.ents.map(e => e.end) : []);
-    for (let y = 0; y < RS; y++) for (let x = 0; x < RS; x++) { const g = gidx(ox + x, oy + y); if (play.obj[g] && !skip.has(g)) drawObj(bctx, play.obj[g], x, y); }
+    for (let y = 0; y < RS; y++) for (let x = 0; x < RS; x++) { const g = gidx(ox + x, oy + y); if (play.obj[g]) SP.cell(bctx, play.obj, live ? a.prev : null, skip, g, x, y); }
     if (live) for (const e of st.ents) if (e.x > ox - 2 && e.y > oy - 2 && e.x < ox + RS + 1 && e.y < oy + RS + 1) drawObj(bctx, e.k, e.x - ox, e.y - oy);
     if (play.npc) play.npc.draw(bctx, now, ox, oy, RS);
     const [px, py] = live ? st.player : [play.p % GW, (play.p / GW) | 0];
     const walking = live && st.playerDir >= 0;
-    SP.player(bctx, px - ox, py - oy, walking ? st.playerDir : play.facing, walking ? 1 + (Math.floor(now / 90) % 3) : 0, playerWet(L, px, py));
+    SP.player(bctx, px - ox, py - oy, walking ? st.playerDir : play.facing, walking ? 1 + (Math.floor(now / 90) % 3) : 0, playerWet(L, play.obj, px, py));
     for (let y = 0; y < RS; y++) for (let x = 0; x < RS; x++) SP.reeds(bctx, L, gidx(ox + x, oy + y), x, y, "front");
     if (play.npc) play.npc.draw(bctx, now, ox, oy, RS, "air");
   }

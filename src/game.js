@@ -37,8 +37,9 @@
   const GAP = new Uint8Array(GW * GW);
   for (let i = 0; i < GW * GW; i++) if (L.terr[i] === "o") for (let d = 0; d < 4; d++) { const n = E.nb(L, i, d); if (n >= 0 && L.terr[n] !== "w") GAP[i] |= 1 << d; }
 
-  const encode = o => Array.from(o).join("");
-  const decode = s => Uint8Array.from(s, ch => +ch);
+  // one character per cell: "0" + object code (codes go past 9 for sunk crates)
+  const encode = o => String.fromCharCode(...Array.from(o, v => 48 + v));
+  const decode = s => Uint8Array.from(s, ch => ch.charCodeAt(0) - 48);
 
   // ---------- state ----------
   let S, obj, hist = [], anim = null, busyUntil = 0, facing = 2, lastStepAt = 0, fade = 0, fadeFrom = null;
@@ -90,13 +91,13 @@
     const el = anim ? now - anim.t0 : 0, live = anim && el < anim.dur;
     const st = live ? E.animAt(L, anim.data, el < anim.first ? el / anim.first : 1 + (el - anim.first) / anim.slide) : null;
     const skip = new Set(live ? anim.data.ents.map(e => e.end) : []);
-    eachCell(ox, oy, (g, x, y) => { if (obj[g] && !skip.has(g)) SP.obj(ctx, obj[g], x, y); });
+    eachCell(ox, oy, (g, x, y) => SP.cell(ctx, obj, live ? anim.prev : null, skip, g, x, y));
     if (live) for (const e of st.ents) SP.obj(ctx, e.k, e.x - ox, e.y - oy);
     NPC.draw(ctx, now, ox, oy, RS);
     const [px, py] = live ? st.player : [S.p % GW, (S.p / GW) | 0];
     const dir = live && st.playerDir >= 0 ? st.playerDir : facing;
     const moving = (live && st.playerDir >= 0) || (held >= 0 && now - lastStepAt < 160);
-    const wet = L.water[gidx(Math.round(px), Math.round(py))] === 1;
+    const pc = gidx(Math.round(px), Math.round(py)), wet = L.water[pc] === 1 && !(obj[pc] & E.SUNK);
     SP.player(ctx, px - ox, py - oy, dir, moving ? 1 + (Math.floor(now / 90) % 3) : 0, wet);
     eachCell(ox, oy, (g, x, y) => SP.reeds(ctx, L, g, x, y, "front"));
     NPC.draw(ctx, now, ox, oy, RS, "air");
@@ -113,10 +114,13 @@
     const first = r.crates >= 5 ? 620 : r.crates === 4 ? 300 : 70, slide = 50;
     const dur = first + Math.max(0, r.anim.T - 1) * slide;
     const t0 = performance.now();
-    anim = reduceMotion ? null : { data: r.anim, t0, dur, first, slide };
+    anim = reduceMotion ? null : { data: r.anim, t0, dur, first, slide, prev: obj };
     busyUntil = t0 + (reduceMotion ? Math.min(dur, 300) : dur);
-    // a splash starts when the squirrel reaches the water; afterwards it faces back toward land
-    if (r.splash) { const t = r.splash.t; splashes.push({ cell: r.splash.cell, t0: t0 + (t < 1 ? t * first : first + (t - 1) * slide) }); facing = (d + 2) % 4; }
+    // a splash starts when the squirrel (or a pushed crate or snowball) reaches the water;
+    // after its own splash the squirrel faces back toward land
+    const when = t => t0 + (reduceMotion ? 0 : t < 1 ? t * first : first + (t - 1) * slide);
+    for (const s of r.splashes) splashes.push({ cell: s.cell, t0: when(s.t) });
+    if (r.splash) { splashes.push({ cell: r.splash.cell, t0: when(r.splash.t) }); facing = (d + 2) % 4; }
     obj = r.obj; S.p = r.p; S.steps++;
     NPC.playerMoved(S.p, t0);
     followPlayer();
@@ -180,7 +184,7 @@
   // ---------- map of visited rooms ----------
   const mini = $("minimap"), mctx = mini.getContext("2d");
   const MAPT = { w: "#7b5a3c", o: "#7b5a3c", "~": "#9cc9d8", h: "#9cc9d8", v: "#9cc9d8", x: "#9cc9d8", e: "#7fd18b", "≈": "#1d4a66", "@": "#4f8f3a", "%": "#3f7a36", "&": "#f0a8bf", ";": "#6f9a3c" };
-  const MAPO = { 1: "#c28b55", 2: "#9fb3c8", 3: "#9fb3c8", 4: "#dfe8eb", 5: "#ffffff", 6: "#ffffff", 7: "#ffffff", 8: "#ffffff", 9: "#e6eef0" };
+  const MAPO = { 16: "#8a6a45", 1: "#c28b55", 2: "#9fb3c8", 3: "#9fb3c8", 4: "#dfe8eb", 5: "#ffffff", 6: "#ffffff", 7: "#ffffff", 8: "#ffffff", 9: "#e6eef0" };
   function drawMini() {
     const s = mini.width / GW, all = $("reveal").checked;
     mctx.fillStyle = C.panel; mctx.fillRect(0, 0, mini.width, mini.height);
@@ -189,7 +193,7 @@
       if (all || S.visited.includes(roomKey(rx, ry))) {
         for (let y = 0; y < RS; y++) for (let x = 0; x < RS; x++) {
           const g = gidx(ox + x, oy + y);
-          mctx.fillStyle = MAPO[obj[g]] || MAPT[L.terr[g]] || "#3a2a1e";
+          mctx.fillStyle = MAPO[obj[g] & 15] || MAPO[obj[g] & E.SUNK] || MAPT[L.terr[g]] || "#3a2a1e";
           mctx.fillRect((ox + x) * s, (oy + y) * s, s, s);
         }
       } else { mctx.strokeStyle = C.line; mctx.strokeRect(ox * s + 1.5, oy * s + 1.5, (RS - 1) * s - 2, (RS - 1) * s - 2); }

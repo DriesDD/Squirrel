@@ -6,6 +6,8 @@
 // Overlays (drawn on top of a base tile; the base comes from `under`, default in OVERLAY_BASE):
 //           @ big lily pad (walkable) · % small lily leaves (blocks) · & lily flower (blocks) · ; reeds (walk through)
 // Objects:  c crate · = horizontal door · ║ vertical door · * snow pile · 1-5 snowball (5 = snow wall)
+//           A crate pushed into water sinks and stays there as a sunk crate: bit 16 (SUNK) of the object code,
+//           so a cell can hold a sunk crate and another object on top (code = SUNK | kind).
 //
 // Rules summary
 // - Pushing: crates, doors (along their rail), snow. A push moves the whole line one tile; at most 5 heavy
@@ -17,8 +19,10 @@
 //   A sliding crate/ball/door that hits a line of objects stops and passes its momentum to the last one in the line.
 //   A sliding player stops at an object and passes momentum on, except a door along its rail: the player pushes it
 //   and they keep sliding together. After a normal push, only the front piece of the line gets momentum.
-// - Water: nothing can be pushed into it. The player who walks or slides into water splashes in, then walks
-//   back out to the tile they came from (the step reports `splash`). Reeds take the rules of the tile under them.
+// - Water: the player who walks or slides into water splashes in, then walks back out to the tile they came from
+//   (the step reports `splash`). A snowball (or snow pile) pushed into water sinks and is gone; a crate sinks and
+//   becomes a sunk crate that works like floor: walk on it, push crates and snowballs onto it. Doors can't enter
+//   water (no rails). Each of these splashes is listed in the step's `splashes`. Reeds take the rules of the tile under them.
 function ENGINE() {
   const DX = [0, 1, 0, -1], DY = [-1, 0, 1, 0];
   const WALK = { "_": 1, "-": 1, "|": 1, "+": 1, "s": 1, "f": 1, "e": 1, "~": 1, "h": 1, "v": 1, "x": 1, "@": 1 };   // e = level exit, @ = big lily pad
@@ -29,6 +33,8 @@ function ENGINE() {
   const KIND = { "c": 1, "=": 2, "║": 3, "*": 4, "1": 5, "2": 6, "3": 7, "4": 8, "5": 9 };
   const CH = ["", "c", "=", "║", "*", "1", "2", "3", "4", "5"];
   const MAX_CRATES = 5;
+  const SUNK = 16, KIND_MASK = 15;
+  const kindOf = v => v & KIND_MASK;
   const PILE = 4, SWALL = 9;
   const snowy = k => k >= 4;
   const snowVal = k => k === PILE ? 1 : k - 4;
@@ -76,11 +82,16 @@ function ENGINE() {
     if (x < 0 || y < 0 || x >= L.W || y >= L.H) return -1;
     return y * L.W + x;
   }
-  function canHold(L, k, i) {
+  // can object kind k stand on cell i (given the objects o, which may include sunk crates)?
+  function canHold(L, o, k, i) {
     if (k === 2) return !!L.hAx[i];
     if (k === 3) return !!L.vAx[i];
-    return !!CRATE_OK[L.eff[i]];
+    return !!CRATE_OK[L.eff[i]] || !!(o[i] & SUNK);
   }
+  const openWater = (L, o, i) => L.water[i] === 1 && !(o[i] & SUNK);
+  const standable = (L, o, i) => !!WALK[L.eff[i]] || !!(o[i] & SUNK);
+  // crates and snow sink when they are pushed or slide into open water
+  const sinks = k => k === 1 || k === 4 || k === 5 || k === 6 || k === 7 || k === 8;
   const perpendicular = (k, d) => (k === 2 && (d & 1) === 0) || (k === 3 && (d & 1) === 1);
 
   // ---- mutable simulation state ----
@@ -88,8 +99,8 @@ function ENGINE() {
   // (time in tiles travelled since the key press), size changes ks [time, code] and an optional time it vanishes.
   function hold(e, t, cell) { const f = e.frames; if (f[f.length - 1][0] < t) f.push([t, cell]); }
   function mv(S, a, b, t) {
-    const was = S.o[a], k = was === PILE ? ball(1) : was;
-    S.o[b] = k; S.o[a] = 0; S.changed = true;
+    const was = kindOf(S.o[a]), k = was === PILE ? ball(1) : was;
+    S.o[b] = (S.o[b] & SUNK) | k; S.o[a] &= SUNK; S.changed = true;
     if (S.tr) {
       const id = S.tr.id[a], e = S.tr.ents[id];
       hold(e, t, a); e.frames.push([t + 1, b]);
@@ -98,17 +109,32 @@ function ENGINE() {
     }
   }
   function kill(S, a, t) {
-    S.o[a] = 0; S.changed = true;
+    S.o[a] &= SUNK; S.changed = true;
     if (S.tr) { const e = S.tr.ents[S.tr.id[a]]; hold(e, t, a); e.dead = t; S.tr.id[a] = -1; }
   }
   function merge(S, a, b, t) {
-    const k = ball(snowVal(S.o[a]) + snowVal(S.o[b]));
+    const k = ball(snowVal(kindOf(S.o[a])) + snowVal(kindOf(S.o[b])));
     if (S.tr) {
       const ea = S.tr.ents[S.tr.id[a]];
       hold(ea, t, a); ea.frames.push([t + 1, b]); ea.dead = t + 1; S.tr.id[a] = -1;
       S.tr.ents[S.tr.id[b]].ks.push([t + 1, k]);
     }
-    S.o[b] = k; S.o[a] = 0; S.changed = true;
+    S.o[b] = (S.o[b] & SUNK) | k; S.o[a] &= SUNK; S.changed = true;
+  }
+  // The piece at a goes into open water at b during t..t+1 and splashes at t+1: a crate stays as a sunk crate
+  // (its animation entity turns into code SUNK), anything else is gone.
+  function sink(S, a, b, t) {
+    const k = kindOf(S.o[a]);
+    S.o[a] &= SUNK; S.changed = true;
+    if (k === 1) S.o[b] |= SUNK;
+    S.splashes.push({ cell: b, t: t + 1 });
+    if (S.tr) {
+      const id = S.tr.id[a], e = S.tr.ents[id];
+      hold(e, t, a); e.frames.push([t + 1, b]);
+      if (k === PILE) e.ks.push([t, ball(1)]);
+      S.tr.id[a] = -1;
+      if (k === 1) { e.ks.push([t + 1, SUNK]); S.tr.id[b] = id; } else e.dead = t + 1;
+    }
   }
   function pmove(S, a, b, t) { if (S.tr) { const e = S.tr.player; hold(e, t, a); e.frames.push([t + 1, b]); } }
 
@@ -118,20 +144,21 @@ function ENGINE() {
     const o = S.o, chain = [];
     let c = c0, hv = 0, end = "";
     for (;;) {
-      const k = o[c];
+      const k = kindOf(o[c]);
       if (k === SWALL || perpendicular(k, d)) return null;
       if (heavy(k) && ++hv > MAX_CRATES) return null;
       chain.push(c);
       const n = nb(L, c, d);
       if (n < 0) { if (small(k)) { end = "break"; break; } return null; }
-      const nk = o[n];
+      const nk = kindOf(o[n]);
       if (snowy(k) && snowy(nk)) { end = "merge"; break; }
       if (nk) {
         if (small(k)) { end = "break"; break; }
-        if (!canHold(L, k, n)) return null;
+        if (!canHold(L, o, k, n)) return null;
         c = n; continue;
       }
-      if (canHold(L, k, n)) { end = "move"; break; }
+      if (canHold(L, o, k, n)) { end = "move"; break; }
+      if (sinks(k) && openWater(L, o, n)) { end = "sink"; break; }
       if (small(k)) { end = "break"; break; }
       return null;
     }
@@ -139,6 +166,7 @@ function ENGINE() {
     let mover = -1;
     if (end === "merge") merge(S, last, nb(L, last, d), t);
     else if (end === "break") kill(S, last, t + .5);
+    else if (end === "sink") sink(S, last, nb(L, last, d), t);
     else { mover = nb(L, last, d); mv(S, last, mover, t); }
     for (let j = chain.length - 2; j >= 0; j--) mv(S, chain[j], nb(L, chain[j], d), t);
     return { heavy: hv, mover };
@@ -146,17 +174,18 @@ function ENGINE() {
 
   // Move one piece a single tile at time t (when it receives momentum). Returns its new cell or -1.
   function nudge(L, S, c, d, t) {
-    const o = S.o, k = o[c], n = nb(L, c, d);
+    const o = S.o, k = kindOf(o[c]), n = nb(L, c, d);
     if (k === SWALL) return -1;
     if (n < 0) { if (small(k)) kill(S, c, t + .5); return -1; }
-    const nk = o[n];
+    const nk = kindOf(o[n]);
     if (nk) {
       if (big(k) && nk === SWALL) return -1;               // big ball stops against a snow wall
       if (snowy(k) && snowy(nk)) merge(S, c, n, t);
       else if (small(k)) kill(S, c, t + .5);
       return -1;
     }
-    if (canHold(L, k, n)) { mv(S, c, n, t); return n; }
+    if (canHold(L, o, k, n)) { mv(S, c, n, t); return n; }
+    if (sinks(k) && openWater(L, o, n)) { sink(S, c, n, t); return -1; }
     if (small(k)) kill(S, c, t + .5);
     return -1;
   }
@@ -166,10 +195,10 @@ function ENGINE() {
     if (!L.ice[n]) return;
     let c = n;
     for (;;) {
-      const k = S.o[c];
+      const k = kindOf(S.o[c]);
       if (k === SWALL || perpendicular(k, d)) return;
       const nn = nb(L, c, d);
-      if (nn >= 0 && S.o[nn] && L.ice[nn]) { c = nn; continue; }
+      if (nn >= 0 && kindOf(S.o[nn]) && L.ice[nn]) { c = nn; continue; }
       break;
     }
     const m = nudge(L, S, c, d, t);
@@ -179,11 +208,12 @@ function ENGINE() {
     if (depth > 64) return;
     for (;;) {
       if (!L.ice[c]) return;
-      const k = S.o[c], n = nb(L, c, d);
+      const k = kindOf(S.o[c]), n = nb(L, c, d);
       if (n < 0) { if (small(k)) kill(S, c, t + .5); return; }
-      const nk = S.o[n];
+      const nk = kindOf(S.o[n]);
       if (!nk) {
-        if (canHold(L, k, n)) { mv(S, c, n, t); c = n; t++; continue; }
+        if (canHold(L, S.o, k, n)) { mv(S, c, n, t); c = n; t++; continue; }
+        if (sinks(k) && openWater(L, S.o, n)) { sink(S, c, n, t); return; }
         if (small(k)) kill(S, c, t + .5);
         return;
       }
@@ -199,9 +229,9 @@ function ENGINE() {
       if (!L.ice[p]) return p;
       const n = nb(L, p, d);
       if (n < 0) return p;
-      if (L.water[n] && !S.o[n]) { splashBack(S, p, n, t); return p; }
-      if (!WALK[L.eff[n]]) return p;
-      const nk = S.o[n];
+      if (openWater(L, S.o, n)) { splashBack(S, p, n, t); return p; }
+      if (!standable(L, S.o, n)) return p;
+      const nk = kindOf(S.o[n]);
       if (!nk) { pmove(S, p, n, t); p = n; t++; continue; }
       if (nk === 2 || nk === 3) {
         if (perpendicular(nk, d)) return p;
@@ -226,18 +256,18 @@ function ENGINE() {
   function step(L, p, obj, d, track = true) {
     const t = nb(L, p, d);
     if (t < 0) return null;
-    const wet = L.water[t] && !obj[t];
-    if (!wet && !WALK[L.eff[t]]) return null;
-    if (!track && (wet || (!L.hasIce && !obj[t]))) return { p: wet ? p : t, obj, crates: 0, changed: false };
-    const S = { o: obj.slice(), tr: null, changed: false };
+    const wet = openWater(L, obj, t);
+    if (!wet && !standable(L, obj, t)) return null;
+    if (!track && (wet || (!L.hasIce && !kindOf(obj[t])))) return { p: wet ? p : t, obj, crates: 0, changed: false };
+    const S = { o: obj.slice(), tr: null, changed: false, splashes: [] };
     if (track) {
       S.tr = { id: new Int32Array(L.N).fill(-1), ents: [], player: { frames: [[0, p]] } };
-      for (let i = 0; i < L.N; i++) if (obj[i]) { S.tr.id[i] = S.tr.ents.length; S.tr.ents.push({ k0: obj[i], ks: [[0, obj[i]]], frames: [[0, i]], dead: null, end: -1 }); }
+      for (let i = 0; i < L.N; i++) { const k = kindOf(obj[i]); if (k) { S.tr.id[i] = S.tr.ents.length; S.tr.ents.push({ k0: k, ks: [[0, k]], frames: [[0, i]], dead: null, end: -1 }); } }
     }
     let hv = 0, pp;
     if (wet) { splashBack(S, p, t, 0); pp = p; }
     else {
-      if (S.o[t]) {
+      if (kindOf(S.o[t])) {
         const r = pushLine(L, S, t, d, 0);
         if (!r) return null;
         hv = r.heavy;
@@ -246,7 +276,7 @@ function ENGINE() {
       pmove(S, p, t, 0);
       pp = slidePlayer(L, S, t, d, 1);
     }
-    const out = { p: pp, obj: S.changed ? S.o : obj, crates: hv, changed: S.changed };
+    const out = { p: pp, obj: S.changed ? S.o : obj, crates: hv, changed: S.changed, splashes: S.splashes };
     if (track) {
       const tr = S.tr;
       for (let i = 0; i < L.N; i++) if (tr.id[i] >= 0) tr.ents[tr.id[i]].end = i;
@@ -295,12 +325,12 @@ function ENGINE() {
   // ---------- solver ----------
   function encode(obj, p) {
     let s = String.fromCharCode(p + 1);
-    for (let i = 0; i < obj.length; i++) if (obj[i]) s += String.fromCharCode(i * 16 + obj[i]);
+    for (let i = 0; i < obj.length; i++) if (obj[i]) s += String.fromCharCode(i * 32 + obj[i]);   // up to 2047 cells
     return s;
   }
   function decode(key, N) {
     const o = new Uint8Array(N);
-    for (let j = 1; j < key.length; j++) { const c = key.charCodeAt(j); o[c >> 4] = c & 15; }
+    for (let j = 1; j < key.length; j++) { const c = key.charCodeAt(j); o[c >> 5] = c & 31; }
     return o;
   }
 
@@ -313,7 +343,7 @@ function ENGINE() {
         let n;
         if (!L.hasIce) {
           n = nb(L, c, d);
-          if (n < 0 || seen[n] || obj[n] || !WALK[L.eff[n]]) continue;
+          if (n < 0 || seen[n] || kindOf(obj[n]) || !standable(L, obj, n)) continue;
         } else {
           const r = step(L, c, obj, d, false);
           if (!r || r.changed) continue;
@@ -359,7 +389,7 @@ function ENGINE() {
       HT[qi] = !!R.seen[target];
       HB[qi] = !!R.seen[back];
       for (const c of R.cells) for (let d = 0; d < 4; d++) {
-        if (!L.hasIce) { const t = nb(L, c, d); if (t < 0 || !obj[t]) continue; }
+        if (!L.hasIce) { const t = nb(L, c, d); if (t < 0 || !kindOf(obj[t])) continue; }
         const res = step(L, c, obj, d, false);
         if (!res || !res.changed) continue;
         const key = keyOf(res.obj, L.hasIce ? { cells: [res.p] } : reach(L, res.obj, res.p));
@@ -419,6 +449,6 @@ function ENGINE() {
     return { sf, fs, ms: Date.now() - t0 };
   }
 
-  return { DX, DY, WALK, CRATE_OK, KIND, CH, WATER, OVERLAY_BASE, build, nb, step, animAt, solveAll };
+  return { DX, DY, WALK, CRATE_OK, KIND, CH, WATER, OVERLAY_BASE, SUNK, build, nb, step, animAt, solveAll };
 }
 if (typeof module !== "undefined") module.exports = ENGINE;
