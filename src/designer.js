@@ -8,7 +8,8 @@
   const TS = 8;                    // one 8x8 sprite per tile; the canvas is scaled up with crisp pixels
   const SP = SPRITES();
   const DEF_UNDER = { c: "_", "=": "-", "║": "|", "*": "_", "1": "_", "2": "_", "3": "_", "4": "_", "5": "_" };
-  const TERRAIN = new Set(["w", "_", "-", "|", "+", "o", "s", "f", "~", "h", "v", "x", "e"]);
+  const TERRAIN = new Set(["w", "_", "-", "|", "+", "o", "s", "f", "~", "h", "v", "x", "e", "≈", "@", "%", "&", ";"]);
+  const OVERLAY = E.OVERLAY_BASE;   // lily pads and reeds sit on another tile (their "base")
   const CP = COMPONENTS(E);
   const ICEC = { "~": 1, "h": 1, "v": 1, "x": 1 };
   const railsOf = t => ({ h: t === "-" || t === "+" || t === "h" || t === "x", v: t === "|" || t === "+" || t === "v" || t === "x" });
@@ -27,10 +28,16 @@
     { ch: "~", name: "Ice", key: "~" },
     { ch: "*", name: "Snow", key: "*" },
     { ch: "b", name: "Snowball", key: "b" },
+    { ch: "≈", name: "Water", key: "a" },
+    { ch: "@", name: "Lily pad", key: "l" },
+    { ch: "%", name: "Lily leaves", key: "k" },
+    { ch: "&", name: "Lily flower", key: "y" },
+    { ch: ";", name: "Reeds", key: "r" },
     { ch: "s", name: "Start", roomName: "Test start", key: "s" },
     { ch: "f", name: "Finish", roomName: "Test finish", key: "f" },
     { ch: "p", name: "Player start", key: "p", room: true },
     { ch: "e", name: "Exit", key: "e", room: true },
+    { ch: "g", name: "Frog", key: "g", room: true },
   ];
   const DIR_LABEL = {
     both: ["Two-way", "Passable from either side, and the player can always get back out the way they came."],
@@ -45,9 +52,9 @@
   const idx = (x, y) => y * ed.W + x;
 
   function blank(W, H) {
-    return { name: "", theme: "warehouse", W, H, terr: Array(W * H).fill("_"), obj: Array(W * H).fill("") };
+    return { name: "", theme: "warehouse", W, H, terr: Array(W * H).fill("_"), obj: Array(W * H).fill(""), base: Array(W * H).fill("") };
   }
-  function clone(m) { return { name: m.name, theme: m.theme || "warehouse", W: m.W, H: m.H, terr: m.terr.slice(), obj: m.obj.slice(), found: m.found, room: m.room, rx: m.rx, ry: m.ry }; }
+  function clone(m) { return { name: m.name, theme: m.theme || "warehouse", W: m.W, H: m.H, terr: m.terr.slice(), obj: m.obj.slice(), base: (m.base || Array(m.W * m.H).fill("")).slice(), found: m.found, room: m.room, rx: m.rx, ry: m.ry }; }
   function pushHistory() { history.push(clone(ed)); if (history.length > 200) history.shift(); }
 
   function normChar(ch) {
@@ -62,8 +69,9 @@
     lines.forEach((l, y) => {
       for (let x = 0; x < W; x++) {
         const ch = normChar(l[x] ?? "w"), i = y * W + x;
-        if (E.KIND[ch]) { m.obj[i] = ch; m.terr[i] = under[x + "," + y] || DEF_UNDER[ch]; }
-        else m.terr[i] = ch;
+        const u = under[x + "," + y];
+        if (E.KIND[ch]) { m.obj[i] = ch; m.terr[i] = u || DEF_UNDER[ch]; }
+        else { m.terr[i] = ch; if (OVERLAY[ch] && u && u !== OVERLAY[ch]) m.base[i] = u; }
       }
     });
     return m;
@@ -74,8 +82,9 @@
       let s = "";
       for (let x = 0; x < m.W; x++) {
         const i = y * m.W + x, o = m.obj[i];
-        if (o) { s += o; if (m.terr[i] !== DEF_UNDER[o]) under[x + "," + y] = m.terr[i]; }
-        else s += m.terr[i];
+        const t = m.terr[i], b = m.base && m.base[i];
+        if (o) { s += o; if (t !== DEF_UNDER[o]) under[x + "," + y] = t; }
+        else { s += t; if (OVERLAY[t] && b && b !== OVERLAY[t]) under[x + "," + y] = b; }
       }
       map.push(s);
     }
@@ -83,6 +92,10 @@
   }
 
   function paint(i, t, click) {
+    paintTile(i, t, click);
+    if (!OVERLAY[ed.terr[i]]) ed.base[i] = "";
+  }
+  function paintTile(i, t, click) {
     const terr = ed.terr[i], obj = ed.obj[i], ice = !!ICEC[terr], r = railsOf(terr);
     if (t === "s" || t === "f") {
       for (let j = 0; j < ed.terr.length; j++) if (ed.terr[j] === t) ed.terr[j] = "_";
@@ -107,6 +120,15 @@
       if (/^[1-5]$/.test(obj)) { if (click) ed.obj[i] = String(obj === "5" ? 1 : +obj + 1); }
       else ed.obj[i] = "1";
       if (!E.CRATE_OK[terr]) ed.terr[i] = "_";
+    } else if (t === "≈") {
+      ed.terr[i] = "≈"; ed.obj[i] = "";
+    } else if (OVERLAY[t]) {
+      // lily pads and reeds keep the tile they are painted on as their base (water for pads by default)
+      const under = OVERLAY[terr] ? (ed.base[i] || OVERLAY[terr]) : terr;
+      const b = (under === "w" || under === "o" || under === "s" || under === "f" || under === "e") ? OVERLAY[t] : under;
+      ed.terr[i] = t; ed.base[i] = b === OVERLAY[t] ? "" : b;
+      if (t !== ";" || (obj && !E.CRATE_OK[b])) ed.obj[i] = "";
+      return;
     } else if (t === "=") {
       ed.obj[i] = "=";
       if (terr !== "o" && !r.h) ed.terr[i] = compose(ice, true, false);
@@ -116,14 +138,20 @@
     }
   }
 
-  function levelOf(m) { return E.build(m.W, m.H, m.terr, m.obj.map(o => o)); }
+  function levelOf(m) { return E.build(m.W, m.H, m.terr, m.obj, m.base); }
 
   // ---------- rendering ----------
   const board = $("board"), bctx = board.getContext("2d");
 
   // All graphics come from the 8x8 spritesheet (see SPRITES)
   function gapMaskOf(L, i) { let m = 0; for (let d = 0; d < 4; d++) { const n = E.nb(L, i, d); if (n >= 0 && L.terr[n] !== "w") m |= 1 << d; } return m; }
-  function drawTile(ctx, L, i, x, y) { SP.tile(ctx, L, i, x, y, { gapMask: L.terr[i] === "o" ? gapMaskOf(L, i) : 0, ports: true }); }
+  function drawTile(ctx, L, i, x, y, now = performance.now()) { SP.tile(ctx, L, i, x, y, { gapMask: L.terr[i] === "o" ? gapMaskOf(L, i) : 0, ports: true, now }); }
+  // splash ripples in progress during play-tests: { cell, t0 }
+  function drawSplashes(L, ox, oy, now) {
+    const list = play.splashes || [];
+    for (let i = list.length - 1; i >= 0; i--) if (!SP.splash(bctx, list[i].cell % L.W - ox, ((list[i].cell / L.W) | 0) - oy, now - list[i].t0)) list.splice(i, 1);
+  }
+  const playerWet = (L, px, py) => L.water[Math.round(py) * L.W + Math.round(px)] === 1;
   function drawObj(ctx, k, fx, fy) { SP.obj(ctx, k, fx, fy); }
 
   function render() {
@@ -132,7 +160,10 @@
     const L = mode === "play" ? play.L : levelOf(m);
     if (board.width !== m.W * TS || board.height !== m.H * TS) { board.width = m.W * TS; board.height = m.H * TS; fit(); }
     bctx.clearRect(0, 0, board.width, board.height);
-    for (let y = 0; y < L.H; y++) for (let x = 0; x < L.W; x++) drawTile(bctx, L, y * L.W + x, x, y, TS);
+    const now = performance.now();
+    for (let y = 0; y < L.H; y++) for (let x = 0; x < L.W; x++) drawTile(bctx, L, y * L.W + x, x, y, now);
+    if (mode === "play") drawSplashes(L, 0, 0, now);
+    for (let y = 0; y < L.H; y++) for (let x = 0; x < L.W; x++) SP.reeds(bctx, L, y * L.W + x, x, y, "back");
     const obj = mode === "play" ? play.obj : L.obj;
     const a = mode === "play" ? play.anim : null;
     const el = a ? performance.now() - a.t0 : 0;
@@ -146,8 +177,12 @@
     if (live) for (const e of st.ents) drawObj(bctx, e.k, e.x, e.y, TS);
     if (mode === "play") {
       const [x, y] = live ? st.player : [play.p % L.W, (play.p / L.W) | 0];
-      SP.player(bctx, x, y, play.facing, live ? 1 + (Math.floor(performance.now() / 90) % 3) : 0);
+      const walking = live && st.playerDir >= 0;
+      SP.player(bctx, x, y, walking ? st.playerDir : play.facing, walking ? 1 + (Math.floor(now / 90) % 3) : 0, playerWet(L, x, y));
+      for (let y = 0; y < L.H; y++) for (let x = 0; x < L.W; x++) SP.reeds(bctx, L, y * L.W + x, x, y, "front");
     } else {
+      if (kind === "room") drawRoomNPCs();
+      for (let y = 0; y < L.H; y++) for (let x = 0; x < L.W; x++) SP.reeds(bctx, L, y * L.W + x, x, y, "front");
       if (kind === "room") drawRoomOverlays();
       if (hover >= 0 && tool !== "stamp") {
         bctx.strokeStyle = C.gate; bctx.lineWidth = 1;
@@ -215,6 +250,7 @@
     pushHistory();
     if (kind === "room" && e.button !== 2 && tool === "stamp") { placeStamp(i); edited(); return; }
     if (kind === "room" && e.button !== 2 && tool === "p") { setPlayerStart(i); edited(); return; }
+    if (kind === "room" && e.button !== 2 && tool === "g") { toggleNPC(i, "frog"); edited(); return; }
     painting = true; paintTool = e.button === 2 ? "_" : tool; lastCell = i;
     paint(i, paintTool, true); edited();
   });
@@ -246,6 +282,7 @@
       const i = idx(x, y), nx = ed.H - 1 - y, ny = x, j = ny * m.W + nx;
       m.terr[j] = swap[ed.terr[i]] || ed.terr[i];
       m.obj[j] = swap[ed.obj[i]] || ed.obj[i];
+      m.base[j] = swap[ed.base[i]] || ed.base[i];
     }
     ed = m; syncInputs(); edited();
   }
@@ -254,7 +291,7 @@
     const m = clone(ed);
     for (let y = 0; y < ed.H; y++) for (let x = 0; x < ed.W; x++) {
       const i = idx(x, y), j = idx(ed.W - 1 - x, y);
-      m.terr[j] = ed.terr[i]; m.obj[j] = ed.obj[i];
+      m.terr[j] = ed.terr[i]; m.obj[j] = ed.obj[i]; m.base[j] = ed.base[i];
     }
     ed = m; edited();
   }
@@ -263,7 +300,7 @@
     pushHistory();
     const m = blank(W, H); m.name = ed.name;
     for (let y = 0; y < Math.min(H, ed.H); y++) for (let x = 0; x < Math.min(W, ed.W); x++) {
-      m.terr[y * W + x] = ed.terr[idx(x, y)]; m.obj[y * W + x] = ed.obj[idx(x, y)];
+      m.terr[y * W + x] = ed.terr[idx(x, y)]; m.obj[y * W + x] = ed.obj[idx(x, y)]; m.base[y * W + x] = ed.base[idx(x, y)];
     }
     ed = m; syncInputs(); edited();
   }
@@ -293,13 +330,13 @@
     let start;
     if (kind === "room") start = startRoomPlay();
     else {
-      play.global = false;
+      play.global = false; play.npc = null;
       play.L = levelOf(ed);
       start = play.from === "s" ? play.L.s : play.L.f;
       play.target = play.from === "s" ? play.L.f : play.L.s; play.startCell = start;
     }
     play.obj = play.L.obj.slice(); play.p = start; play.hist = []; play.anim = null; play.pushes = 0; play.steps = 0;
-    play.path = []; play.reached = false;
+    play.path = []; play.reached = false; play.splashes = [];
     stopWatch();
     $("banner").hidden = true;
     updateStatus(); render();
@@ -330,11 +367,14 @@
     play.path.push(d);
     const first = r.crates >= 5 ? 620 : r.crates === 4 ? 300 : 95, slide = 60;
     const dur = first + Math.max(0, r.anim.T - 1) * slide;
-    play.anim = { data: r.anim, t0: performance.now(), dur, first, slide };
+    const t0 = performance.now();
+    play.anim = { data: r.anim, t0, dur, first, slide };
     play.facing = d;
+    if (r.splash) { const t = r.splash.t; (play.splashes ||= []).push({ cell: r.splash.cell, t0: t0 + (t < 1 ? t * first : first + (t - 1) * slide) }); play.facing = (d + 2) % 4; }
     play.busyUntil = performance.now() + dur;
     play.p = r.p; play.obj = r.obj; play.steps++;
     if (r.changed) play.pushes++;
+    if (play.npc) play.npc.playerMoved(play.p, t0);
     if (play.global) followPlayer();
     const target = play.target, startCell = play.startCell;
     let msg = "";
@@ -410,6 +450,7 @@
       } else if (!watch && held >= 0 && now >= nextRepeat && now >= play.busyUntil) {
         playMove(held); nextRepeat = now + 80;
       }
+      if (play.npc) play.npc.update(now);
       render();
     }
     requestAnimationFrame(loop);
@@ -448,7 +489,7 @@
   }
   function runSolve() {
     solveId++;
-    const data = { id: solveId, W: ed.W, H: ed.H, terr: ed.terr.slice(), obj: ed.obj.slice(), cap: 300000 };
+    const data = { id: solveId, W: ed.W, H: ed.H, terr: ed.terr.slice(), obj: ed.obj.slice(), base: ed.base.slice(), cap: 300000 };
     if (worker) worker.terminate();
     worker = makeWorker();
     if (worker) worker.postMessage(data);
@@ -456,7 +497,7 @@
   }
 
   // Solutions found while play-testing, tied to the exact map they were found on.
-  const mapKey = () => ed.W + "x" + ed.H + ":" + ed.terr.join("") + "|" + ed.obj.map(o => o || ".").join("");
+  const mapKey = () => ed.W + "x" + ed.H + ":" + ed.terr.join("") + "|" + ed.obj.map(o => o || ".").join("") + "|" + ed.base.map(b => b || ".").join("");
   function playFound() {
     if (!ed.found || ed.found.key !== mapKey()) ed.found = { key: mapKey(), sf: null, fs: null, sfs: false, fsf: false };
     return ed.found;
@@ -672,13 +713,13 @@
     const terr = Array(GW * GW).fill("_"), obj = Array(GW * GW).fill("");
     for (let y = 0; y < GW; y++) for (let x = 0; x < GW; x++) if (x % (RS - 1) === 0 || y % (RS - 1) === 0) terr[gidx(x, y)] = "w";
     const [ox, oy] = origin(2, 2);
-    return { terr, obj, start: gidx(ox + 10, oy + 10), rooms: {} };
+    return { terr, obj, base: Array(GW * GW).fill(""), npcs: [], start: gidx(ox + 10, oy + 10), rooms: {} };
   }
   function loadView() {
     const [ox, oy] = origin(...cur), m = blank(RS, RS);
     for (let y = 0; y < RS; y++) for (let x = 0; x < RS; x++) {
       const g = gidx(ox + x, oy + y), i = y * RS + x;
-      m.terr[i] = world.terr[g]; m.obj[i] = world.obj[g];
+      m.terr[i] = world.terr[g]; m.obj[i] = world.obj[g]; m.base[i] = world.base[g];
     }
     const rd = roomData(...cur);
     if (rd.s >= 0) { m.terr[rd.s] = "s"; m.obj[rd.s] = ""; }
@@ -692,22 +733,26 @@
     rd.s = rd.f = -1;
     for (let y = 0; y < RS; y++) for (let x = 0; x < RS; x++) {
       const g = gidx(ox + x, oy + y), i = y * RS + x, t = ed.terr[i];
-      if (t === "s" || t === "f") { rd[t] = i; world.terr[g] = "_"; world.obj[g] = ""; }   // test markers stand on plain floor
-      else { world.terr[g] = t; world.obj[g] = ed.obj[i]; }
+      if (t === "s" || t === "f") { rd[t] = i; world.terr[g] = "_"; world.obj[g] = ""; world.base[g] = ""; }   // test markers stand on plain floor
+      else { world.terr[g] = t; world.obj[g] = ed.obj[i]; world.base[g] = ed.base[i]; }
     }
     rd.found = ed.found || null;
   }
   let saveTimer = 0;
   function saveWorldSoon() { clearTimeout(saveTimer); saveTimer = setTimeout(saveWorld, 250); }
+  // don't lose the last edit when the page is closed or reloaded right after it
+  addEventListener("pagehide", () => { if (world && kind === "room") { commitView(); saveWorld(); } });
   function saveWorld() {
-    saveStore(WORLD_KEY, { v: 1, terr: world.terr.join(""), obj: world.obj.map(o => o || ".").join(""), start: world.start, rooms: world.rooms, cur });
+    clearTimeout(saveTimer);
+    saveStore(WORLD_KEY, { v: 1, terr: world.terr.join(""), obj: world.obj.map(o => o || ".").join(""), base: world.base.map(b => b || ".").join(""), npcs: world.npcs, start: world.start, rooms: world.rooms, cur });
   }
   function loadWorld() {
     const s = loadStore(WORLD_KEY);
     if (!s || s.v !== 1) return null;
     const terr = [...s.terr], obj = [...s.obj].map(c => c === "." ? "" : c);
     if (terr.length !== GW * GW || obj.length !== GW * GW) return null;
-    return { terr, obj, start: s.start ?? -1, rooms: s.rooms || {}, _cur: s.cur };
+    const base = s.base ? [...s.base].map(c => c === "." ? "" : c) : Array(GW * GW).fill("");
+    return { terr, obj, base, npcs: s.npcs || [], start: s.start ?? -1, rooms: s.rooms || {}, _cur: s.cur };
   }
 
   function goRoom(rx, ry) {
@@ -728,7 +773,7 @@
   // world overview: 2 px per tile, room outlines, current room highlighted
   const ov = $("overview"), octx = ov.getContext("2d");
   const ovBuf = document.createElement("canvas"); ovBuf.width = ovBuf.height = GW;
-  const OVT = { w: "#7b5a3c", o: "#7b5a3c", "~": "#2d515c", h: "#2d515c", v: "#2d515c", x: "#2d515c", e: "#7fd18b", "-": "#56646a", "|": "#56646a", "+": "#56646a" };
+  const OVT = { w: "#7b5a3c", o: "#7b5a3c", "~": "#9cc9d8", h: "#9cc9d8", v: "#9cc9d8", x: "#9cc9d8", e: "#7fd18b", "-": "#56646a", "|": "#56646a", "+": "#56646a", "≈": "#1d4a66", "@": "#4f8f3a", "%": "#3f7a36", "&": "#f0a8bf", ";": "#6f9a3c" };
   const OVO = { c: "#c28b55", "=": "#9fb3c8", "║": "#9fb3c8", "*": "#dfe8eb", "1": "#ffffff", "2": "#ffffff", "3": "#ffffff", "4": "#ffffff", "5": "#e6eef0" };
   function drawOverview() {
     if (!world) return;
@@ -755,9 +800,27 @@
 
   function setPlayerStart(i) {
     const [ox, oy] = origin(...cur);
-    if (!E.WALK[ed.terr[i]] || ed.terr[i] === "s" || ed.terr[i] === "f") ed.terr[i] = "_";
+    if (!(E.WALK[ed.terr[i]] || ed.terr[i] === ";") || ed.terr[i] === "s" || ed.terr[i] === "f") { ed.terr[i] = "_"; ed.base[i] = ""; }
     ed.obj[i] = "";
     world.start = gidx(ox + i % RS, oy + ((i / RS) | 0));
+  }
+  // NPCs (frogs) are placed by clicking; clicking one again removes it
+  function toggleNPC(i, type) {
+    const [ox, oy] = origin(...cur), g = gidx(ox + i % RS, oy + ((i / RS) | 0));
+    const at = world.npcs.findIndex(n => n.g === g);
+    if (at >= 0) { world.npcs.splice(at, 1); return; }
+    const L = levelOf(ed);
+    if (!(L.water[i] || E.WALK[L.eff[i]]) || ed.obj[i]) { flash("A frog needs open water or ground it can stand on."); return; }
+    world.npcs.push({ type, g });
+  }
+  function drawRoomNPCs() {
+    const [ox, oy] = origin(...cur), L = levelOf(ed);
+    for (const n of world.npcs) {
+      const x = n.g % GW - ox, y = ((n.g / GW) | 0) - oy;
+      if (x < 0 || y < 0 || x >= RS || y >= RS) continue;
+      if (L.water[y * RS + x]) SP.drawSubmerged(bctx, "frog_swim0", x * 8, y * 8, false, 5, 1);
+      else SP.draw(bctx, "frog_jump0", x * 8, y * 8);
+    }
   }
   function drawRoomOverlays() {
     const [ox, oy] = origin(...cur);
@@ -768,7 +831,7 @@
     if (tool === "stamp" && hover >= 0) {
       const g = stampGrid(); if (!g) return;
       const x0 = hover % RS - (g.W >> 1), y0 = ((hover / RS) | 0) - (g.H >> 1);
-      const L = E.build(g.W, g.H, g.terr, g.obj);
+      const L = E.build(g.W, g.H, g.terr, g.obj, g.base);
       bctx.save(); bctx.globalAlpha = .75; bctx.translate(x0 * TS, y0 * TS);
       for (let y = 0; y < g.H; y++) for (let x = 0; x < g.W; x++) { drawTile(bctx, L, y * g.W + x, x, y); if (L.obj[y * g.W + x]) drawObj(bctx, L.obj[y * g.W + x], x, y); }
       bctx.restore();
@@ -811,7 +874,7 @@
       const j = y * g.W + x, k = Y * RS + X, t = g.terr[j];
       if (t === "s" || t === "f") {           // the piece's own s/f become this room's test markers if it has none yet
         if (!ed.terr.includes(t)) { ed.terr[k] = t; ed.obj[k] = ""; } else { ed.terr[k] = "_"; ed.obj[k] = ""; }
-      } else { ed.terr[k] = t; ed.obj[k] = g.obj[j]; }
+      } else { ed.terr[k] = t; ed.obj[k] = g.obj[j]; ed.base[k] = g.base[j] || ""; }
     }
   }
   $("compPick").addEventListener("change", () => { stamp.pick = $("compPick").value; stamp.t = 0; setTool("stamp"); render(); });
@@ -850,7 +913,7 @@
   function roomOfCell(g) { const gx = g % GW, gy = (g / GW) | 0; return [Math.min(RN - 1, Math.floor(gx / (RS - 1))), Math.min(RN - 1, Math.floor(gy / (RS - 1)))]; }
   function startRoomPlay() {
     commitView();
-    const L = E.build(GW, GW, world.terr, world.obj);
+    const L = E.build(GW, GW, world.terr, world.obj, world.base);
     const rd = roomData(...cur), [ox, oy] = origin(...cur);
     const gl = li => gidx(ox + li % RS, oy + ((li / RS) | 0));
     let start = -1, target = -1;
@@ -860,11 +923,14 @@
       if (play.from !== "p") flash(`This room has no test ${play.from}, so play starts at the player start.`);
       play.from = "p"; start = world.start;
     }
-    if (start < 0 || !E.WALK[L.terr[start]] || L.obj[start]) {
+    if (start < 0 || !E.WALK[L.eff[start]] || L.obj[start]) {
       start = -1;
-      for (let y = 1; y < RS - 1 && start < 0; y++) for (let x = 1; x < RS - 1; x++) { const g = gidx(ox + x, oy + y); if (E.WALK[L.terr[g]] && !L.obj[g]) { start = g; break; } }
+      for (let y = 1; y < RS - 1 && start < 0; y++) for (let x = 1; x < RS - 1; x++) { const g = gidx(ox + x, oy + y); if (E.WALK[L.eff[g]] && !L.obj[g]) { start = g; break; } }
     }
-    play.global = true; play.L = L; play.target = target; play.startCell = start; play.leftRoom = false;
+    play.global = true; play.L = L; play.target = target; play.startCell = start; play.leftRoom = false; play.splashes = [];
+    play.npc = NPCS(E, SP).create(L, () => play.obj, world.npcs.map(n => ({ type: n.type, x: n.g % GW, y: (n.g / GW) | 0 })),
+      { onSplash: (cell, t0) => play.splashes.push({ cell, t0 }) });
+    play.npc.setPlayer(start);
     const r = roomOfCell(start);
     if (r[0] !== cur[0] || r[1] !== cur[1]) { cur = r; loadView(); updateRoomLabel(); drawOverview(); }
     return start;
@@ -881,14 +947,20 @@
     const L = play.L, [ox, oy] = origin(...cur);
     if (board.width !== RS * TS) { board.width = board.height = RS * TS; fit(); }
     bctx.clearRect(0, 0, board.width, board.height);
-    for (let y = 0; y < RS; y++) for (let x = 0; x < RS; x++) drawTile(bctx, L, gidx(ox + x, oy + y), x, y);
-    const a = play.anim, el = a ? performance.now() - a.t0 : 0, live = a && el < a.dur;
+    const now = performance.now();
+    for (let y = 0; y < RS; y++) for (let x = 0; x < RS; x++) drawTile(bctx, L, gidx(ox + x, oy + y), x, y, now);
+    drawSplashes(L, ox, oy, now);
+    for (let y = 0; y < RS; y++) for (let x = 0; x < RS; x++) SP.reeds(bctx, L, gidx(ox + x, oy + y), x, y, "back");
+    const a = play.anim, el = a ? now - a.t0 : 0, live = a && el < a.dur;
     const st = live ? E.animAt(L, a.data, el < a.first ? el / a.first : 1 + (el - a.first) / a.slide) : null;
     const skip = new Set(live ? a.data.ents.map(e => e.end) : []);
     for (let y = 0; y < RS; y++) for (let x = 0; x < RS; x++) { const g = gidx(ox + x, oy + y); if (play.obj[g] && !skip.has(g)) drawObj(bctx, play.obj[g], x, y); }
     if (live) for (const e of st.ents) if (e.x > ox - 2 && e.y > oy - 2 && e.x < ox + RS + 1 && e.y < oy + RS + 1) drawObj(bctx, e.k, e.x - ox, e.y - oy);
+    if (play.npc) play.npc.draw(bctx, now, ox, oy, RS);
     const [px, py] = live ? st.player : [play.p % GW, (play.p / GW) | 0];
-    SP.player(bctx, px - ox, py - oy, play.facing, live ? 1 + (Math.floor(performance.now() / 90) % 3) : 0);
+    const walking = live && st.playerDir >= 0;
+    SP.player(bctx, px - ox, py - oy, walking ? st.playerDir : play.facing, walking ? 1 + (Math.floor(now / 90) % 3) : 0, playerWet(L, px, py));
+    for (let y = 0; y < RS; y++) for (let x = 0; x < RS; x++) SP.reeds(bctx, L, gidx(ox + x, oy + y), x, y, "front");
   }
 
   // ---- switching between room and component mode ----
@@ -900,7 +972,7 @@
     $("modeName").textContent = kind === "room" ? "Room designer" : "Component designer";
     $("board").setAttribute("aria-label", kind === "room" ? "Room editor" : "Component editor");
     history = []; hover = -1;
-    if (tool === "stamp" || (kind === "comp" && (tool === "p" || tool === "e"))) tool = "w";
+    if (tool === "stamp" || (kind === "comp" && (tool === "p" || tool === "e" || tool === "g"))) tool = "w";
     if (kind === "room") { loadView(); updateRoomLabel(); drawOverview(); refreshCompPick(); }
     else { ed = compEd; syncInputs(); }
     buildTools(); setTool(tool); fit(); render(); updateStatus();
@@ -921,7 +993,7 @@
   // browser, and "Copy world" / "Download world.js" produce a complete replacement for that file.
   function worldData() {
     commitView();
-    const { map, under } = toMap({ W: GW, H: GW, terr: world.terr, obj: world.obj });
+    const { map, under } = toMap({ W: GW, H: GW, terr: world.terr, obj: world.obj, base: world.base });
     const tests = {};
     for (const [k, rd] of Object.entries(world.rooms)) {
       const [rx, ry] = k.split(",").map(Number), [ox, oy] = origin(rx, ry), t = {};
@@ -930,14 +1002,14 @@
       if (t.s || t.f) tests[k] = t;
     }
     const st = world.start >= 0 ? [world.start % GW, (world.start / GW) | 0] : null;
-    return `{\n  "version": 1,\n  "rooms": ${RN},\n  "roomSize": ${RS},\n  "start": ${JSON.stringify(st)},\n  "map": [\n${map.map(l => "    " + JSON.stringify(l)).join(",\n")}\n  ],\n  "under": ${JSON.stringify(under)},\n  "tests": ${JSON.stringify(tests)}\n}`;
+    return `{\n  "version": 1,\n  "rooms": ${RN},\n  "roomSize": ${RS},\n  "start": ${JSON.stringify(st)},\n  "map": [\n${map.map(l => "    " + JSON.stringify(l)).join(",\n")}\n  ],\n  "under": ${JSON.stringify(under)},\n  "tests": ${JSON.stringify(tests)},\n  "npcs": ${JSON.stringify(world.npcs.map(n => ({ type: n.type, x: n.g % GW, y: (n.g / GW) | 0 })))}\n}`;
   }
-  const worldFile = () => `// The world played by the game (index.html). The designer (designer.html) also starts from it\n// when nothing is saved in the browser. Replace this whole file with the designer's "Copy world"\n// or "Download world.js" to update the game.\nconst WORLD_DATA = ${worldData()};\n`;
+  const worldFile = () => (saveWorld(), `// The world played by the game (index.html). The designer (designer.html) also starts from it\n// when nothing is saved in the browser. Replace this whole file with the designer's "Copy world"\n// or "Download world.js" to update the game.\nconst WORLD_DATA = ${worldData()};\n`);
   // WORLD_DATA-style object -> editor world
   function worldFromData(w) {
     if (!w || !Array.isArray(w.map) || w.map.length !== GW || w.map.some(l => [...l].length !== GW)) throw new Error("size");
     const m = fromMap(w.map, w.under || {});
-    const nw = { terr: m.terr, obj: m.obj, start: w.start ? gidx(w.start[0], w.start[1]) : -1, rooms: {} };
+    const nw = { terr: m.terr, obj: m.obj, base: m.base, npcs: (w.npcs || []).map(n => ({ type: n.type, g: gidx(n.x, n.y) })), start: w.start ? gidx(w.start[0], w.start[1]) : -1, rooms: {} };
     for (const [k, t] of Object.entries(w.tests || {})) {
       const [rx, ry] = k.split(",").map(Number), [ox, oy] = origin(rx, ry);
       nw.rooms[k] = { s: t.s ? (t.s[1] - oy) * RS + (t.s[0] - ox) : -1, f: t.f ? (t.f[1] - oy) * RS + (t.f[0] - ox) : -1, found: null };

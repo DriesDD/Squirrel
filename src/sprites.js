@@ -22,7 +22,13 @@ const SPRITE_MAP = {   // name: [column, row] of the 8x8 slot
   sq_side0: [0, 6], sq_side1: [1, 6], sq_side2: [2, 6], sq_side3: [3, 6],
   // row 7
   sq_up0: [0, 7], sq_up1: [1, 7], sq_up2: [2, 7], sq_up3: [3, 7],
+  // row 8: water animation frames, splash ripple frames, lily pads
+  water0: [0, 8], water1: [1, 8], water2: [2, 8], water3: [3, 8], splash0: [4, 8], splash1: [5, 8], splash2: [6, 8], splash3: [7, 8], lilypad0: [8, 8], lilypad1: [9, 8], lilyleaves0: [10, 8], lilyleaves1: [11, 8], lilyflower: [12, 8],
+  // row 9: reeds, frog (facing right; left is mirrored): jump frames sit/crouch/air/land, swim frames
+  reeds0: [0, 9], reeds1: [1, 9], reeds2: [2, 9], reeds3: [3, 9], frog_jump0: [4, 9], frog_jump1: [5, 9], frog_jump2: [6, 9], frog_jump3: [7, 9], frog_swim0: [8, 9], frog_swim1: [9, 9], frog_swim2: [10, 9], frog_swim3: [11, 9],
 };
+const WATER_FRAME_MS = 320;   // water animation speed
+const SPLASH_FRAME_MS = 90;   // splash ripple speed (4 frames)
 function SPRITES() {
   const img = new Image();
   let ready = false;
@@ -45,8 +51,41 @@ function SPRITES() {
     if (flip) { ctx.save(); ctx.translate(x + 8, y); ctx.scale(-1, 1); ctx.drawImage(img, s[0] * 8, s[1] * 8, 8, 8, 0, 0, 8, 8); ctx.restore(); }
     else ctx.drawImage(img, s[0] * 8, s[1] * 8, 8, 8, x, y, 8, 8);
   }
+  // a sprite turned by quarter turns (rot 0-3) and optionally mirrored, e.g. lily leaves
+  function drawTurned(ctx, name, x, y, rot, flip) {
+    const s = SPRITE_MAP[name];
+    if (!s || !ready) return;
+    ctx.save(); ctx.translate(Math.round(x) + 4, Math.round(y) + 4); ctx.rotate(rot * Math.PI / 2); if (flip) ctx.scale(-1, 1);
+    ctx.drawImage(img, s[0] * 8, s[1] * 8, 8, 8, -4, -4, 8, 8); ctx.restore();
+  }
+  // Part or all of a sprite under water: rows from `cut` down are tinted dark and see-through.
+  // cut = 4 for "half submerged", 0 for fully under (diving). lower shifts the sprite down in pixels.
+  const tmp = document.createElement("canvas"); tmp.width = tmp.height = 8;
+  const tctx = tmp.getContext("2d");
+  function drawSubmerged(ctx, name, x, y, flip, cut, lower) {
+    const s = SPRITE_MAP[name];
+    if (!s || !ready) return;
+    tctx.clearRect(0, 0, 8, 8);
+    tctx.globalCompositeOperation = "source-over";
+    if (flip) { tctx.save(); tctx.translate(8, 0); tctx.scale(-1, 1); tctx.drawImage(img, s[0] * 8, s[1] * 8, 8, 8, 0, 0, 8, 8); tctx.restore(); }
+    else tctx.drawImage(img, s[0] * 8, s[1] * 8, 8, 8, 0, 0, 8, 8);
+    tctx.globalCompositeOperation = "source-atop";
+    tctx.fillStyle = "rgba(14, 44, 64, 0.72)"; tctx.fillRect(0, cut, 8, 8 - cut);
+    tctx.globalCompositeOperation = "source-over";
+    x = Math.round(x); y = Math.round(y) + (lower || 0);
+    if (cut > 0) ctx.drawImage(tmp, 0, 0, 8, cut, x, y, 8, cut);
+    ctx.save(); ctx.globalAlpha *= 0.6; ctx.drawImage(tmp, 0, cut, 8, 8 - cut, x, y + cut, 8, 8 - cut); ctx.restore();
+  }
+
+  // The tile under an overlay (lily pads, reeds), or the tile itself.
+  const baseOf = (L, i) => { const t = L.terr[i], b = OVERLAY_BASE[t]; return b ? ((L.base && L.base[i]) || b) : t; };
+  // Water tiles animate, so they are drawn every frame (pass opts.now); the static pass skips them.
+  const isAnimated = (L, i) => L.terr[i] !== "w" && L.terr[i] !== "o" && baseOf(L, i) === WATER;
+  const OVERLAY_BASE = { ";": "_", "@": "≈", "%": "≈", "&": "≈" }, WATER = "≈";
+
   // Terrain tile of level L at cell i, drawn at grid position (x, y).
-  // opts.gapMask: open sides of a gapped wall (1 N, 2 E, 4 S, 8 W); opts.ports: show test s/f letters
+  // opts.gapMask: open sides of a gapped wall (1 N, 2 E, 4 S, 8 W); opts.ports: show test s/f letters;
+  // opts.now: time in ms, needed to draw water (without it water tiles are skipped)
   function tile(ctx, L, i, x, y, opts = {}) {
     const t = L.terr[i], X = x * 8, Y = y * 8, flip = (hash(x, y, 7) & 1) === 1;
     if (t === "w") {
@@ -63,11 +102,33 @@ function SPRITES() {
       if (L.vAx[i] && (m & 4)) draw(ctx, "rail_s", X, Y);
       return;
     }
-    draw(ctx, variant(t === "e" ? "exit" : L.ice[i] ? "ice" : "floor", x, y), X, Y, flip);
-    if (L.hAx[i] && L.vAx[i]) draw(ctx, "rail_x", X, Y);
-    else if (L.hAx[i]) draw(ctx, "rail_h", X, Y);
-    else if (L.vAx[i]) draw(ctx, "rail_v", X, Y);
+    const b = baseOf(L, i);
+    if (b === WATER) {
+      if (opts.now === undefined) return;
+      draw(ctx, "water" + (Math.floor(opts.now / WATER_FRAME_MS) % 4), X, Y);
+    } else {
+      draw(ctx, variant(b === "e" ? "exit" : L.ice[i] ? "ice" : "floor", x, y), X, Y, flip);
+      if (L.hAx[i] && L.vAx[i]) draw(ctx, "rail_x", X, Y);
+      else if (L.hAx[i]) draw(ctx, "rail_h", X, Y);
+      else if (L.vAx[i]) draw(ctx, "rail_v", X, Y);
+    }
+    if (t === "@") draw(ctx, variant("lilypad", x, y), X, Y, flip);
+    else if (t === "%") drawTurned(ctx, variant("lilyleaves", x, y), X, Y, hash(x, y, 3) & 3, flip);
+    else if (t === "&") draw(ctx, "lilyflower", X, Y, flip);
     if (opts.ports && (t === "s" || t === "f")) draw(ctx, "port_" + t, X, Y);
+  }
+  // Reeds are drawn twice: shifted up behind whatever is on the tile, shifted down in front of it,
+  // so anything standing in them is half hidden. layer is "back" or "front".
+  function reeds(ctx, L, i, x, y, layer) {
+    if (L.terr[i] !== ";") return;
+    draw(ctx, variant("reeds", x, y), x * 8, y * 8 + (layer === "back" ? -3 : 2), (hash(x, y, 5) & 1) === 1);
+  }
+  // splash ripple that started `ms` milliseconds ago; returns false once it has finished
+  function splash(ctx, fx, fy, ms) {
+    const f = Math.floor(ms / SPLASH_FRAME_MS);
+    if (f < 0 || f > 3) return f < 0;
+    draw(ctx, "splash" + f, fx * 8, fy * 8);
+    return true;
   }
   // Object code k (see engine.js) at tile position (fx, fy), fractional while animating.
   const OBJ = { 1: "crate", 2: "door_h", 3: "door_v", 5: "ball1", 6: "ball2", 7: "ball3", 8: "ball4", 9: "snowwall" };
@@ -75,10 +136,12 @@ function SPRITES() {
     if (k === 4) { const x = Math.round(fx), y = Math.round(fy); draw(ctx, variant("snow", x, y), fx * 8, fy * 8, (hash(x, y, 7) & 1) === 1); return; }
     draw(ctx, OBJ[k], fx * 8, fy * 8);
   }
-  // Squirrel: dir 0 up, 1 right, 2 down, 3 left (right mirrored); frame 0 standing, 1-3 running
-  function player(ctx, fx, fy, dir, frame) {
-    const base = dir === 0 ? "sq_up" : dir === 2 ? "sq_down" : "sq_side";
-    draw(ctx, base + frame, fx * 8, fy * 8, dir === 3);
+  // Squirrel: dir 0 up, 1 right, 2 down, 3 left (right mirrored); frame 0 standing, 1-3 running.
+  // inWater: half submerged (bottom half tinted, 1 px lower).
+  function player(ctx, fx, fy, dir, frame, inWater) {
+    const name = (dir === 0 ? "sq_up" : dir === 2 ? "sq_down" : "sq_side") + frame;
+    if (inWater) drawSubmerged(ctx, name, fx * 8, fy * 8, dir === 3, 4, 1);
+    else draw(ctx, name, fx * 8, fy * 8, dir === 3);
   }
-  return { draw, tile, obj, player, variant, onReady(f) { listeners.push(f); if (ready) f(); } };
+  return { draw, drawSubmerged, drawTurned, tile, reeds, splash, isAnimated, obj, player, variant, onReady(f) { listeners.push(f); if (ready) f(); } };
 }

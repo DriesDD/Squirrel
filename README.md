@@ -33,8 +33,13 @@ Edit it at 1:1 in any pixel editor (Aseprite, Piskel, GIMP, …), save, and refr
 | 3 | `rail_h`, `rail_v`, `rail_x`, `rail_n`, `rail_e`, `rail_s`, `rail_w` (half rails for gaps), `door_h`, `door_v`, `crate`, `port_s`, `port_f` (designer only) |
 | 4 | `ball1`–`ball4`, `snowwall` (slot 4), `exit0`, `exit1` (slots 7–8) |
 | 5–7 | squirrel facing down, sideways (right; left is mirrored) and up: frame 0 standing, 1–3 running |
+| 8 | `water0`–`water3` (animation frames), `splash0`–`splash3` (ripple frames), `lilypad0`–`lilypad1`, `lilyleaves0`–`lilyleaves1`, `lilyflower` |
+| 9 | `reeds0`–`reeds3`, `frog_jump0`–`frog_jump3` (sit, crouch, in the air, landing), `frog_swim0`–`frog_swim3` (all facing right) |
 
-Rows 8–15 and the other empty slots are free. Numbered names are random variants of one sprite:
+Rows 10–15 and the other empty slots are free. Water, splash and frog frames are animation frames, not random variants.
+Animation speeds are at the top of `src/sprites.js` (`WATER_FRAME_MS`, `SPLASH_FRAME_MS`).
+Anything in the water (the squirrel, frogs) is drawn with its lower part darkened and see-through; reeds are drawn
+twice, shifted up behind whatever stands in them and shifted down in front of it. Numbered names are random variants of one sprite:
 to add a variant, draw it in a free slot and add e.g. `floor8: [col, row]` to `SPRITE_MAP`.
 
 ## Project layout
@@ -46,6 +51,7 @@ to add a variant, draw it in a free slot and add e.g. `floor8: [col, row]` to `S
 | `src/engine.js` | Rules shared by both: movement, pushing, ice, snow, and the solver. |
 | `src/sprites.js` | Sprite map and renderer. |
 | `src/comp.js` | Reads ASCII maps and makes the 8 rotations/mirrors of a component. |
+| `src/npc.js` | NPCs that move on their own (frogs), shared by the game and the designer's play-test. |
 | `src/library.js` | Component library. Paste components exported from Component mode here. |
 | `data/world.js` | The world the game plays. |
 | `sprites/spritesheet.png` | The spritesheet. |
@@ -54,6 +60,22 @@ to add a variant, draw it in a free slot and add e.g. `floor8: [col, row]` to `S
 ## Map characters
 
 Terrain: `w` wall · `_` floor · `o` gapped wall · `-` `|` `+` rails · `~` ice · `h` `v` `x` ice with rails ·
-`e` exit · `s` `f` test start/finish (components and route checks only).
+`≈` water · `e` exit · `s` `f` test start/finish (components and route checks only).
+Overlays, drawn on another tile (water by default, floor for reeds; `under` records any other): `@` big lily pad
+(walkable) · `%` small lily leaves (blocks) · `&` lily flower (blocks) · `;` reeds (walk through; they follow the rules
+of the tile under them).
 Objects: `c` crate · `=` `║` sliding doors · `*` snow · `1`–`5` snowball sizes (5 is a snow wall).
 An object standing on something other than plain floor records the tile underneath in `under`.
+
+## NPCs
+
+The world file lists NPCs as `"npcs": [{ "type": "frog", "x": 42, "y": 44 }]` (world tile coordinates); place them
+with the Frog tool in the designer. Frogs are cautious: they hop between spots near water (2–4 tiles per jump on land,
+resting in between; swimming without pause in water), climb onto big lily pads, jump into the nearest water when you
+come within 5 tiles on land, and swim away (or dive) when you come within 2 tiles in the water. Their tuning values
+are in the `FROG` object in `src/npc.js`; a new kind of NPC is a new entry in `BEHAVIOURS` there.
+
+## Water
+
+Nothing can be pushed into water. When the squirrel walks or slides into it, it splashes in and walks back out to the
+tile it came from.

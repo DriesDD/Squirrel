@@ -2,7 +2,9 @@
 // Written as one self-contained function so it can be stringified into a Web Worker.
 //
 // Terrain:  w wall · _ floor · o gapped wall · s/f ports · - | + rails
-//           ~ ice · h v x ice with horizontal / vertical / crossing rail
+//           ~ ice · h v x ice with horizontal / vertical / crossing rail · e exit · ≈ water
+// Overlays (drawn on top of a base tile; the base comes from `under`, default in OVERLAY_BASE):
+//           @ big lily pad (walkable) · % small lily leaves (blocks) · & lily flower (blocks) · ; reeds (walk through)
 // Objects:  c crate · = horizontal door · ║ vertical door · * snow pile · 1-5 snowball (5 = snow wall)
 //
 // Rules summary
@@ -15,9 +17,13 @@
 //   A sliding crate/ball/door that hits a line of objects stops and passes its momentum to the last one in the line.
 //   A sliding player stops at an object and passes momentum on, except a door along its rail: the player pushes it
 //   and they keep sliding together. After a normal push, only the front piece of the line gets momentum.
+// - Water: nothing can be pushed into it. The player who walks or slides into water splashes in, then walks
+//   back out to the tile they came from (the step reports `splash`). Reeds take the rules of the tile under them.
 function ENGINE() {
   const DX = [0, 1, 0, -1], DY = [-1, 0, 1, 0];
-  const WALK = { "_": 1, "-": 1, "|": 1, "+": 1, "s": 1, "f": 1, "e": 1, "~": 1, "h": 1, "v": 1, "x": 1 };   // e = level exit
+  const WALK = { "_": 1, "-": 1, "|": 1, "+": 1, "s": 1, "f": 1, "e": 1, "~": 1, "h": 1, "v": 1, "x": 1, "@": 1 };   // e = level exit, @ = big lily pad
+  const WATER = "≈";
+  const OVERLAY_BASE = { ";": "_", "@": WATER, "%": WATER, "&": WATER };   // default tile under each overlay
   const CRATE_OK = { "_": 1, "-": 1, "|": 1, "+": 1, "~": 1, "h": 1, "v": 1, "x": 1 };
   const ICE = { "~": 1, "h": 1, "v": 1, "x": 1 };
   const KIND = { "c": 1, "=": 2, "║": 3, "*": 4, "1": 5, "2": 6, "3": 7, "4": 8, "5": 9 };
@@ -31,12 +37,17 @@ function ENGINE() {
   const heavy = k => k === 1 || k === 7 || k === 8;
   const big = k => k === 7 || k === 8;
 
-  function build(W, H, terr, objCh) {
+  // terr: tile characters; objCh: object characters; base (optional): tile under an overlay ("" = default).
+  // eff is the tile whose rules apply: reeds follow the tile under them, everything else is itself.
+  function build(W, H, terr, objCh, base) {
     const N = W * H;
-    const obj = new Uint8Array(N), hAx = new Uint8Array(N), vAx = new Uint8Array(N), ice = new Uint8Array(N);
+    const obj = new Uint8Array(N), hAx = new Uint8Array(N), vAx = new Uint8Array(N), ice = new Uint8Array(N), water = new Uint8Array(N);
+    const eff = new Array(N);
     let s = -1, f = -1, sCount = 0, fCount = 0, hasIce = false;
     for (let i = 0; i < N; i++) {
-      const t = terr[i];
+      const t = terr[i] === ";" ? ((base && base[i]) || OVERLAY_BASE[";"]) : terr[i];
+      eff[i] = t;
+      if (t === WATER) water[i] = 1;
       if (t === "-" || t === "+" || t === "h" || t === "x") hAx[i] = 1;
       if (t === "|" || t === "+" || t === "v" || t === "x") vAx[i] = 1;
       if (ICE[t]) { ice[i] = 1; hasIce = true; }
@@ -57,7 +68,7 @@ function ENGINE() {
         if (!vAx[i] && ((y > 0 && vAx[i - W]) || (y < H - 1 && vAx[i + W]))) { vAx[i] = 1; changed = true; }
       }
     }
-    return { W, H, N, terr, obj, hAx, vAx, ice, hasIce, s, f, sCount, fCount };
+    return { W, H, N, terr, eff, base: base || null, obj, hAx, vAx, ice, water, hasIce, s, f, sCount, fCount };
   }
 
   function nb(L, i, d) {
@@ -68,7 +79,7 @@ function ENGINE() {
   function canHold(L, k, i) {
     if (k === 2) return !!L.hAx[i];
     if (k === 3) return !!L.vAx[i];
-    return !!CRATE_OK[L.terr[i]];
+    return !!CRATE_OK[L.eff[i]];
   }
   const perpendicular = (k, d) => (k === 2 && (d & 1) === 0) || (k === 3 && (d & 1) === 1);
 
@@ -187,7 +198,9 @@ function ENGINE() {
     for (let guard = 0; guard < L.N; guard++) {
       if (!L.ice[p]) return p;
       const n = nb(L, p, d);
-      if (n < 0 || !WALK[L.terr[n]]) return p;
+      if (n < 0) return p;
+      if (L.water[n] && !S.o[n]) { splashBack(S, p, n, t); return p; }
+      if (!WALK[L.eff[n]]) return p;
       const nk = S.o[n];
       if (!nk) { pmove(S, p, n, t); p = n; t++; continue; }
       if (nk === 2 || nk === 3) {
@@ -204,24 +217,35 @@ function ENGINE() {
   // One player move from p in direction d. Returns null when nothing happens.
   // { p, obj, crates (heavy pieces pushed), changed (objects changed), anim }
   // anim (only when track): { T, player: [[t, cell]...], ents: [{ k0, ks, frames, dead, end }] }
+  // Walking into water: in, a moment under, then back out to where the player came from.
+  function splashBack(S, p, n, t) {
+    S.splash = { cell: n, t: t + 1 };
+    // times are in animation units (the game plays one unit of sliding in ~50 ms): ~0.45 s under, then a walk back
+    if (S.tr) { const e = S.tr.player; hold(e, t, p); e.frames.push([t + 1, n], [t + 10, n], [t + 13, p]); }
+  }
   function step(L, p, obj, d, track = true) {
     const t = nb(L, p, d);
-    if (t < 0 || !WALK[L.terr[t]]) return null;
-    if (!L.hasIce && !obj[t] && !track) return { p: t, obj, crates: 0, changed: false };
+    if (t < 0) return null;
+    const wet = L.water[t] && !obj[t];
+    if (!wet && !WALK[L.eff[t]]) return null;
+    if (!track && (wet || (!L.hasIce && !obj[t]))) return { p: wet ? p : t, obj, crates: 0, changed: false };
     const S = { o: obj.slice(), tr: null, changed: false };
     if (track) {
       S.tr = { id: new Int32Array(L.N).fill(-1), ents: [], player: { frames: [[0, p]] } };
       for (let i = 0; i < L.N; i++) if (obj[i]) { S.tr.id[i] = S.tr.ents.length; S.tr.ents.push({ k0: obj[i], ks: [[0, obj[i]]], frames: [[0, i]], dead: null, end: -1 }); }
     }
-    let hv = 0;
-    if (S.o[t]) {
-      const r = pushLine(L, S, t, d, 0);
-      if (!r) return null;
-      hv = r.heavy;
-      if (r.mover >= 0 && L.ice[r.mover]) slideObj(L, S, r.mover, d, 0, 1);
+    let hv = 0, pp;
+    if (wet) { splashBack(S, p, t, 0); pp = p; }
+    else {
+      if (S.o[t]) {
+        const r = pushLine(L, S, t, d, 0);
+        if (!r) return null;
+        hv = r.heavy;
+        if (r.mover >= 0 && L.ice[r.mover]) slideObj(L, S, r.mover, d, 0, 1);
+      }
+      pmove(S, p, t, 0);
+      pp = slidePlayer(L, S, t, d, 1);
     }
-    pmove(S, p, t, 0);
-    const pp = slidePlayer(L, S, t, d, 1);
     const out = { p: pp, obj: S.changed ? S.o : obj, crates: hv, changed: S.changed };
     if (track) {
       const tr = S.tr;
@@ -229,6 +253,7 @@ function ENGINE() {
       const ents = tr.ents.filter(e => e.frames.length > 1 || e.dead !== null || e.ks.length > 1);
       let T = tr.player.frames[tr.player.frames.length - 1][0];
       for (const e of ents) T = Math.max(T, e.frames[e.frames.length - 1][0], e.dead ?? 0, e.ks[e.ks.length - 1][0]);
+      out.splash = S.splash || null;
       out.anim = { T, player: tr.player, ents };
     }
     return out;
@@ -255,7 +280,16 @@ function ENGINE() {
       const [x, y] = xy(at(e.frames));
       ents.push({ k, x, y });
     }
-    return { player: xy(at(anim.player.frames)), ents };
+    // direction the player is moving at this moment (for facing), or -1 when standing still
+    let dir = -1;
+    const pf = anim.player.frames;
+    for (let i = 0; i + 1 < pf.length; i++) {
+      if (tau >= pf[i][0] && tau < pf[i + 1][0] && pf[i][1] !== pf[i + 1][1]) {
+        const dx = pf[i + 1][1] % L.W - pf[i][1] % L.W, dy = ((pf[i + 1][1] / L.W) | 0) - ((pf[i][1] / L.W) | 0);
+        dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 1 : 3) : (dy > 0 ? 2 : 0);
+      }
+    }
+    return { player: xy(at(anim.player.frames)), playerDir: dir, ents };
   }
 
   // ---------- solver ----------
@@ -279,7 +313,7 @@ function ENGINE() {
         let n;
         if (!L.hasIce) {
           n = nb(L, c, d);
-          if (n < 0 || seen[n] || obj[n] || !WALK[L.terr[n]]) continue;
+          if (n < 0 || seen[n] || obj[n] || !WALK[L.eff[n]]) continue;
         } else {
           const r = step(L, c, obj, d, false);
           if (!r || r.changed) continue;
@@ -376,7 +410,7 @@ function ENGINE() {
   }
 
   function solveAll(data) {
-    const L = build(data.W, data.H, data.terr, data.obj);
+    const L = build(data.W, data.H, data.terr, data.obj, data.base);
     if (L.sCount !== 1 || L.fCount !== 1) return { error: "Place exactly one s and one f before solving." };
     const cap = data.cap || 150000;
     const t0 = Date.now();
@@ -385,6 +419,6 @@ function ENGINE() {
     return { sf, fs, ms: Date.now() - t0 };
   }
 
-  return { DX, DY, WALK, CRATE_OK, KIND, CH, build, nb, step, animAt, solveAll };
+  return { DX, DY, WALK, CRATE_OK, KIND, CH, WATER, OVERLAY_BASE, build, nb, step, animAt, solveAll };
 }
 if (typeof module !== "undefined") module.exports = ENGINE;

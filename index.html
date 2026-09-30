@@ -133,6 +133,10 @@ kbd { font: 500 12px var(--f-mono); color: var(--ink); border: 1px solid var(--l
         <li><canvas data-piece="ice" width="8" height="8"></canvas><span>Ice. You, crates, doors and snowballs keep sliding until they leave the ice or hit something.</span></li>
         <li><canvas data-piece="snow" width="8" height="8"></canvas><span>Snow. Push it to roll a snowball; rolling over snow or into another ball makes it bigger.</span></li>
         <li><canvas data-piece="ball" width="8" height="8"></canvas><span>Snowball. Small ones break when they hit something, sizes 3 and 4 act like crates, size 5 is a wall of snow.</span></li>
+        <li><canvas data-piece="water" width="8" height="8"></canvas><span>Water. Walk in and you splash straight back out. Nothing can be pushed into it.</span></li>
+        <li><canvas data-piece="lilypad" width="8" height="8"></canvas><span>Lily pad. The big ones hold you up; small leaves and flowers are in the way.</span></li>
+        <li><canvas data-piece="reeds" width="8" height="8"></canvas><span>Reeds. Walk right through them.</span></li>
+        <li><canvas data-piece="frog" width="8" height="8"></canvas><span>Frog. Shy: it jumps into the water when you come close.</span></li>
         <li><canvas data-piece="exit" width="8" height="8"></canvas><span>Exit. Step on it to escape.</span></li>
       </ul>
     </div>
@@ -148,5 +152,6 @@ kbd { font: 500 12px var(--f-mono); color: var(--ink); border: 1px solid var(--l
 <script src="src/engine.js"></script>
 <script src="src/sprites.js"></script>
 <script src="src/comp.js"></script>
+<script src="src/npc.js"></script>
 <script src="data/world.js"></script>
 <script src="src/game.js"></script>

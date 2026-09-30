@@ -50,3 +50,14 @@ t('big ball slides into snow wall: stops', ['@3~~~5'], R, {}, '_@~~35');
 t('ball 4 slides into snow wall: stops', ['@4~~5'], R, {}, '_@~45');
 t('small ball slides into snow wall: absorbed', ['@2~~5'], R, {}, '_@~~5');
 t('push big ball into snow wall (no ice)', ['@35'], R, {}, '_@5');
+// ---- water ----
+function tw(name, lines, d, expectP, expectSplash) {
+  let p = -1; lines = lines.map((l, y) => { const x = [...l].indexOf('@'); if (x >= 0) { p = y * [...l].length + x; return l.replace('@', '_'); } return l; });
+  const l = lvl(lines); const L = E.build(l.W, l.H, l.terr, l.obj); const r = E.step(L, p, L.obj, d);
+  const got = r ? `p=${r.p} splash=${r.splash ? r.splash.cell : '-'}` : 'p=x splash=-';
+  const want = `p=${expectP} splash=${expectSplash}`;
+  console.log(name.padEnd(44), got + (got === want ? ' ✓' : ' ✗ expected ' + want));
+}
+tw('walk into water: splash, stay', ['@≈'], R, 0, 1);
+tw('slide on ice into water: splash, stop on ice', ['@~~≈'], R, 2, 3);
+tw('crate cannot be pushed into water', ['@c≈'], R, 'x', '-');

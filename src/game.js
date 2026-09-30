@@ -24,7 +24,7 @@
   }
   const grid = CP.parse(WORLD_DATA);
   if (grid.W !== GW || grid.H !== GW) { problem(`The world in data/world.js is ${grid.W}×${grid.H} tiles; it has to be ${GW}×${GW}.`); return; }
-  const L = E.build(GW, GW, grid.terr, grid.obj);
+  const L = E.build(GW, GW, grid.terr, grid.obj, grid.base);
   const INITIAL = L.obj;
   const gidx = (gx, gy) => gy * GW + gx;
   const origin = (rx, ry) => [rx * (RS - 1), ry * (RS - 1)];
@@ -42,6 +42,8 @@
 
   // ---------- state ----------
   let S, obj, hist = [], anim = null, busyUntil = 0, facing = 2, lastStepAt = 0, fade = 0, fadeFrom = null;
+  const splashes = [];   // { cell, t0 } ripple effects in progress
+  const NPC = NPCS(E, SP).create(L, () => obj, WORLD_DATA.npcs || [], { onSplash: (cell, t0) => splashes.push({ cell, t0 }) });
   function newGame() {
     const cur = roomOf(START);
     S = { id: WORLD_ID, p: START, cur, visited: [roomKey(...cur)], steps: 0, t0: Date.now(), elapsed: 0, won: false,
@@ -73,17 +75,30 @@
     bgCache.set(k, c);
     return c;
   }
+  // Drawing order: ground, animated water (with lily pads), splashes, reeds (back), objects, NPCs,
+  // the squirrel, reeds (front).
+  const eachCell = (ox, oy, f) => { for (let y = 0; y < RS; y++) for (let x = 0; x < RS; x++) f(gidx(ox + x, oy + y), x, y); };
   function draw(now) {
     const [ox, oy] = origin(...S.cur);
     ctx.drawImage(roomBackground(...S.cur), 0, 0);
+    eachCell(ox, oy, (g, x, y) => { if (SP.isAnimated(L, g)) SP.tile(ctx, L, g, x, y, { now, gapMask: GAP[g] }); });
+    for (let i = splashes.length - 1; i >= 0; i--) {
+      const s = splashes[i];
+      if (!SP.splash(ctx, s.cell % GW - ox, ((s.cell / GW) | 0) - oy, now - s.t0)) splashes.splice(i, 1);
+    }
+    eachCell(ox, oy, (g, x, y) => SP.reeds(ctx, L, g, x, y, "back"));
     const el = anim ? now - anim.t0 : 0, live = anim && el < anim.dur;
     const st = live ? E.animAt(L, anim.data, el < anim.first ? el / anim.first : 1 + (el - anim.first) / anim.slide) : null;
     const skip = new Set(live ? anim.data.ents.map(e => e.end) : []);
-    for (let y = 0; y < RS; y++) for (let x = 0; x < RS; x++) { const g = gidx(ox + x, oy + y); if (obj[g] && !skip.has(g)) SP.obj(ctx, obj[g], x, y); }
+    eachCell(ox, oy, (g, x, y) => { if (obj[g] && !skip.has(g)) SP.obj(ctx, obj[g], x, y); });
     if (live) for (const e of st.ents) SP.obj(ctx, e.k, e.x - ox, e.y - oy);
+    NPC.draw(ctx, now, ox, oy, RS);
     const [px, py] = live ? st.player : [S.p % GW, (S.p / GW) | 0];
-    const moving = live || (held >= 0 && now - lastStepAt < 160);
-    SP.player(ctx, px - ox, py - oy, facing, moving ? 1 + (Math.floor(now / 90) % 3) : 0);
+    const dir = live && st.playerDir >= 0 ? st.playerDir : facing;
+    const moving = (live && st.playerDir >= 0) || (held >= 0 && now - lastStepAt < 160);
+    const wet = L.water[gidx(Math.round(px), Math.round(py))] === 1;
+    SP.player(ctx, px - ox, py - oy, dir, moving ? 1 + (Math.floor(now / 90) % 3) : 0, wet);
+    eachCell(ox, oy, (g, x, y) => SP.reeds(ctx, L, g, x, y, "front"));
     if (fade > 0 && fadeFrom) { ctx.globalAlpha = fade; ctx.drawImage(fadeFrom, 0, 0); ctx.globalAlpha = 1; }
   }
 
@@ -96,9 +111,13 @@
     if (r.changed) { hist.push({ p: S.p, obj }); if (hist.length > 300) hist.shift(); }
     const first = r.crates >= 5 ? 620 : r.crates === 4 ? 300 : 70, slide = 50;
     const dur = first + Math.max(0, r.anim.T - 1) * slide;
-    anim = reduceMotion ? null : { data: r.anim, t0: performance.now(), dur, first, slide };
-    busyUntil = performance.now() + (reduceMotion ? Math.min(dur, 300) : dur);
+    const t0 = performance.now();
+    anim = reduceMotion ? null : { data: r.anim, t0, dur, first, slide };
+    busyUntil = t0 + (reduceMotion ? Math.min(dur, 300) : dur);
+    // a splash starts when the squirrel reaches the water; afterwards it faces back toward land
+    if (r.splash) { const t = r.splash.t; splashes.push({ cell: r.splash.cell, t0: t0 + (t < 1 ? t * first : first + (t - 1) * slide) }); facing = (d + 2) % 4; }
     obj = r.obj; S.p = r.p; S.steps++;
+    NPC.playerMoved(S.p, t0);
     followPlayer();
     if (L.terr[S.p] === "e") win();
     save(); updateUI();
@@ -159,7 +178,7 @@
 
   // ---------- map of visited rooms ----------
   const mini = $("minimap"), mctx = mini.getContext("2d");
-  const MAPT = { w: "#7b5a3c", o: "#7b5a3c", "~": "#2d515c", h: "#2d515c", v: "#2d515c", x: "#2d515c", e: "#7fd18b" };
+  const MAPT = { w: "#7b5a3c", o: "#7b5a3c", "~": "#9cc9d8", h: "#9cc9d8", v: "#9cc9d8", x: "#9cc9d8", e: "#7fd18b", "≈": "#1d4a66", "@": "#4f8f3a", "%": "#3f7a36", "&": "#f0a8bf", ";": "#6f9a3c" };
   const MAPO = { 1: "#c28b55", 2: "#9fb3c8", 3: "#9fb3c8", 4: "#dfe8eb", 5: "#ffffff", 6: "#ffffff", 7: "#ffffff", 8: "#ffffff", 9: "#e6eef0" };
   function drawMini() {
     const s = mini.width / GW, all = $("reveal").checked;
@@ -187,7 +206,7 @@
     $("steps").textContent = S.steps;
     $("undoBtn").disabled = !hist.length;
   }
-  const LEGEND = { crate: ["floor0", "crate"], door: ["floor0", "rail_h", "door_h"], gap: ["gap10", "rail_w", "rail_e"], ice: ["ice0"], snow: ["snow0"], ball: ["floor0", "ball3"], exit: ["exit0"] };
+  const LEGEND = { water: ["water0"], lilypad: ["water0", "lilypad0"], reeds: ["floor0", "reeds0"], frog: ["frog_jump0"], crate: ["floor0", "crate"], door: ["floor0", "rail_h", "door_h"], gap: ["gap10", "rail_w", "rail_e"], ice: ["ice0"], snow: ["snow0"], ball: ["floor0", "ball3"], exit: ["exit0"] };
   function drawLegend() {
     document.querySelectorAll("canvas[data-piece]").forEach(cv => {
       const g = cv.getContext("2d"); g.clearRect(0, 0, 8, 8);
@@ -200,6 +219,7 @@
     const dt = now - last; last = now;
     if (held >= 0 && now >= nextRepeat && now >= busyUntil) { move(held); nextRepeat = now + 20; }
     if (fade > 0) { fade = Math.max(0, fade - dt / 180); if (fade === 0) fadeFrom = null; }
+    NPC.update(now);
     if (anim && now - anim.t0 > anim.dur) { anim = null; drawMini(); }
     draw(now);
     $("time").textContent = fmtTime(S.won ? S.elapsed : Date.now() - S.t0);
@@ -208,5 +228,6 @@
 
   SP.onReady(() => { bgCache.clear(); drawLegend(); });
   if (load()) { if (S.won) win(); updateUI(); drawMini(); } else newGame();
+  NPC.setPlayer(S.p);
   requestAnimationFrame(frame);
 })();
