@@ -1,307 +1,10 @@
-<meta charset="utf-8">
-<title>Twenty-Five Rooms Designer</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;700&family=Figtree:wght@400;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
-<style>
-/* Layout: workbench. Left = tools, centre = component canvas with mode tabs, right = solver, export, library. Same single dark look as the game. */
-:root {
-  --ground: #11171a;
-  --panel: #182125;
-  --line: #2a373c;
-  --floor: #1c2528;
-  --wall: #cfc6b4;
-  --ink: #e6e1d6;
-  --muted: #8c9a9c;
-  --gate: #e0a340;
-  --exit: #7fd18b;
-  --player: #6fc7e0;
-  --crate: #c28b55;
-  --door: #9fb3c8;
-  --rail: #5f7479;
-  --ice: #25424b;
-  --ice-line: #7fb6c4;
-  --snow: #e6eef0;
-  --bad: #e27d6b;
-  --f-display: "Chakra Petch", "Trebuchet MS", sans-serif;
-  --f-body: "Figtree", system-ui, sans-serif;
-  --f-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
-  color-scheme: dark;
-}
-[hidden] { display: none !important; }
-html, body { height: 100%; }
-body { background: var(--ground); color: var(--ink); font: 14px/1.5 var(--f-body); padding-inline: 16px; box-sizing: border-box; }
-*, *::before, *::after { box-sizing: inherit; }
-.bench {
-  height: 100%; display: grid; gap: 16px; padding-block: 16px;
-  grid-template-columns: minmax(220px, 260px) minmax(0, 1fr) minmax(280px, 340px);
-}
-.panel {
-  display: flex; flex-direction: column; gap: 20px; min-width: 0; min-height: 0; overflow: auto;
-  background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 18px;
-}
-h1 { font: 700 24px/1.05 var(--f-display); margin: 0; text-wrap: balance; }
-h1 span { color: var(--gate); display: block; font-size: 15px; letter-spacing: .14em; text-transform: uppercase; margin-top: 4px; }
-h2 { font: 500 11px/1 var(--f-mono); text-transform: uppercase; letter-spacing: .12em; color: var(--muted); margin: 0 0 10px; }
-section { min-width: 0; }
-input[type="text"], input[type="number"], textarea {
-  font: 500 13px var(--f-mono); color: var(--ink); background: var(--ground);
-  border: 1px solid var(--line); border-radius: 4px; padding: 7px 9px; min-width: 0;
-}
-input[type="text"] { width: 100%; }
-select { font: 500 13px var(--f-body); color: var(--ink); background: var(--ground); border: 1px solid var(--line); border-radius: 4px; padding: 7px 9px; width: 100%; }
-input[type="number"] { width: 64px; }
-textarea { width: 100%; resize: vertical; line-height: 1.35; }
-button {
-  font: 600 13px var(--f-body); color: var(--ground); background: var(--gate);
-  border: 0; border-radius: 4px; padding: 7px 11px; cursor: pointer;
-}
-button.ghost { background: transparent; color: var(--ink); border: 1px solid var(--line); }
-button:hover { filter: brightness(1.12); }
-button:disabled { opacity: .45; cursor: default; filter: none; }
-:focus-visible { outline: 2px solid var(--player); outline-offset: 2px; }
-.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-.size label { color: var(--muted); font-size: 13px; display: flex; gap: 6px; align-items: center; }
-
-.tools { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
-.tool {
-  display: grid; grid-template-columns: 28px 1fr auto; align-items: center; gap: 8px; text-align: left;
-  background: var(--ground); color: var(--ink); border: 1px solid var(--line); padding: 5px 7px; font-weight: 400;
-}
-.tool canvas { width: 28px; height: 28px; display: block; image-rendering: pixelated; }
-.filebtn { font: 600 13px var(--f-body); color: var(--ink); border: 1px solid var(--line); border-radius: 4px; padding: 7px 11px; cursor: pointer; }
-.filebtn:hover { filter: brightness(1.12); }
-.tool kbd { font: 500 11px var(--f-mono); color: var(--muted); }
-.tool[aria-pressed="true"] { border-color: var(--gate); box-shadow: inset 0 0 0 1px var(--gate); }
-.hint { color: var(--muted); font-size: 12.5px; margin: 8px 0 0; }
-
-.stage { display: flex; flex-direction: column; gap: 10px; min-width: 0; min-height: 0; }
-.bar { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
-.tabs { display: inline-flex; border: 1px solid var(--line); border-radius: 5px; overflow: hidden; }
-.tabs button { background: transparent; color: var(--muted); border-radius: 0; padding: 7px 16px; }
-.tabs button[aria-selected="true"] { background: var(--gate); color: var(--ground); }
-.status { font: 400 12.5px var(--f-mono); color: var(--muted); font-variant-numeric: tabular-nums; }
-.canvasWrap { flex: 1; min-height: 0; display: grid; place-items: center; position: relative; }
-#board { display: block; image-rendering: pixelated; touch-action: none; cursor: crosshair; }
-.play #board { cursor: default; }
-.banner {
-  position: absolute; top: 8px; left: 50%; transform: translateX(-50%);
-  background: var(--exit); color: var(--ground); font: 700 14px var(--f-display); letter-spacing: .04em;
-  padding: 6px 14px; border-radius: 4px;
-}
-
-.verdict { display: flex; flex-direction: column; gap: 4px; }
-.verdict strong { font: 700 22px/1.1 var(--f-display); }
-.verdict p { margin: 0; color: var(--muted); font-size: 13px; }
-.v-both strong { color: var(--exit); } .v-sf strong, .v-fs strong, .v-either-once strong { color: var(--gate); } .v-none strong { color: var(--bad); }
-.pips { display: inline-flex; gap: 3px; vertical-align: middle; margin-left: 6px; }
-.pips i { width: 10px; height: 10px; border-radius: 2px; background: var(--line); display: block; }
-.pips i.on { background: var(--gate); }
-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-td { padding: 5px 0; border-bottom: 1px solid var(--line); vertical-align: middle; }
-td:nth-child(2) { white-space: nowrap; font-family: var(--f-mono); text-align: right; font-variant-numeric: tabular-nums; padding-inline: 8px; }
-td:last-child { text-align: right; width: 1%; white-space: nowrap; }
-td button { padding: 3px 8px; font-size: 12px; }
-.yes { color: var(--exit); } .no { color: var(--bad); }
-.warn { margin: 0; padding-left: 18px; color: var(--gate); font-size: 13px; }
-.warn:empty { display: none; }
-pre#exportOut {
-  margin: 0; font: 400 12px/1.4 var(--f-mono); background: var(--ground); border: 1px solid var(--line);
-  border-radius: 4px; padding: 10px; overflow-x: auto; max-height: 220px; white-space: pre;
-}
-.lib { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
-.lib li { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: center; border: 1px solid var(--line); border-radius: 4px; padding: 5px 5px 5px 9px; }
-.lib li button.name { background: none; color: var(--ink); text-align: left; padding: 0; font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.lib .meta { font: 400 11.5px var(--f-mono); color: var(--muted); }
-.lib .del { background: none; color: var(--muted); padding: 2px 6px; }
-.empty { color: var(--muted); font-size: 13px; margin: 0; }
-.kind-room .comp-only, .kind-comp .room-only { display: none !important; }
-#overview { width: 100%; max-width: 220px; aspect-ratio: 1; display: block; image-rendering: pixelated; cursor: pointer; border-radius: 3px; }
-.nav { display: grid; grid-template-columns: repeat(3, 40px); grid-template-rows: repeat(2, 32px); gap: 4px; margin-top: 10px; }
-.nav button { padding: 0; font-size: 15px; }
-.nav .n { grid-area: 1 / 2; } .nav .w { grid-area: 2 / 1; } .nav .s { grid-area: 2 / 2; } .nav .e { grid-area: 2 / 3; }
-.kindTabs { display: flex; margin-top: 14px; flex-shrink: 0; }
-.panel > * { flex-shrink: 0; }
-.kindTabs button { flex: 1; }
-#stampBtn[aria-pressed="true"] { box-shadow: inset 0 0 0 2px var(--ground); }
-
-@media (max-width: 1000px) {
-  html, body { height: auto; }
-  .bench { grid-template-columns: 1fr; height: auto; }
-  .stage { order: -1; }
-  .canvasWrap { min-height: 50vh; }
-}
-@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
-</style>
-
-<div class="bench kind-room" id="bench">
-  <aside class="panel" aria-label="Tools">
-    <h1>Twenty-Five Rooms<span id="modeName">Room designer</span></h1>
-    <div class="tabs kindTabs" role="tablist" aria-label="Designer mode">
-      <button id="kindRoom" role="tab" aria-selected="true" type="button">Rooms</button>
-      <button id="kindComp" role="tab" aria-selected="false" type="button">Component</button>
-    </div>
-
-    <section class="room-only">
-      <h2>Room <span id="roomLabel"></span></h2>
-      <canvas id="overview" width="192" height="192" aria-label="World map: click a room to edit it"></canvas>
-      <div class="nav" aria-label="Go to the next room">
-        <button class="ghost n" id="goN" type="button" aria-label="Room above">↑</button>
-        <button class="ghost w" id="goW" type="button" aria-label="Room to the left">←</button>
-        <button class="ghost s" id="goS" type="button" aria-label="Room below">↓</button>
-        <button class="ghost e" id="goE" type="button" aria-label="Room to the right">→</button>
-      </div>
-      <p class="hint">Arrow keys switch rooms too. The outer row of tiles is shared with the neighbouring room, so edits there show up on both sides. Everything saves automatically.</p>
-    </section>
-
-    <section class="comp-only">
-      <h2><label for="name">Component name</label></h2>
-      <input id="name" type="text" maxlength="40" autocomplete="off">
-      <h2 style="margin-top:14px"><label for="theme">Theme</label></h2>
-      <select id="theme">
-        <option value="warehouse">Warehouse</option>
-        <option value="cold">Cold</option>
-      </select>
-    </section>
-
-    <section class="size comp-only">
-      <h2>Size</h2>
-      <div class="row">
-        <label for="w">W <input id="w" type="number" min="3" max="30"></label>
-        <label for="h">H <input id="h" type="number" min="3" max="30"></label>
-        <button class="ghost" id="applySize" type="button">Resize</button>
-      </div>
-    </section>
-
-    <section>
-      <h2>Tiles</h2>
-      <div class="tools" id="tools"></div>
-      <p class="hint">Click or drag to paint. Right-click paints floor. Press the key shown to pick a tile.</p>
-    </section>
-
-    <section class="room-only">
-      <h2><label for="compPick">Insert component</label></h2>
-      <select id="compPick"></select>
-      <div class="row" style="margin-top:8px">
-        <button id="stampBtn" type="button" aria-pressed="false">Place</button>
-        <button class="ghost" id="stampRot" type="button">Rotate (R)</button>
-        <button class="ghost" id="stampMir" type="button">Mirror (M)</button>
-      </div>
-      <p class="hint">Click in the room to drop it, centred on the cursor. Esc stops placing.</p>
-    </section>
-
-    <section class="room-only">
-      <h2>Room edits</h2>
-      <div class="row">
-        <button class="ghost" id="undoRoom" type="button">Undo edit</button>
-        <button class="ghost" id="clearRoom" type="button">Clear room</button>
-      </div>
-    </section>
-
-    <section>
-      <h2>Spritesheet</h2>
-      <div class="row">
-        <label class="filebtn" for="sheetFile">Load spritesheet</label>
-        <input type="file" id="sheetFile" accept="image/png" hidden>
-        <button class="ghost" id="sheetReset" type="button">Built-in</button>
-      </div>
-      <p class="hint" id="sheetMsg">One 128×128 PNG of 8×8 sprites.</p>
-    </section>
-
-    <section class="comp-only">
-      <h2>Transform</h2>
-      <div class="row">
-        <button class="ghost" id="rot" type="button">Rotate 90°</button>
-        <button class="ghost" id="mir" type="button">Mirror</button>
-        <button class="ghost" id="undoEdit" type="button">Undo edit</button>
-        <button class="ghost" id="clear" type="button">Clear</button>
-      </div>
-    </section>
-  </aside>
-
-  <main class="stage" id="stage">
-    <div class="bar">
-      <div class="tabs" role="tablist">
-        <button id="tabEdit" role="tab" aria-selected="true" type="button">Edit</button>
-        <button id="tabPlay" role="tab" aria-selected="false" type="button">Play-test</button>
-      </div>
-      <div class="row" id="playControls" hidden>
-        <button class="ghost room-only" id="startP" type="button">From player start</button>
-        <button class="ghost" id="startS" type="button">Start at s</button>
-        <button class="ghost" id="startF" type="button">Start at f</button>
-        <button class="ghost" id="undoMove" type="button">Undo (Z)</button>
-        <button class="ghost" id="resetPlay" type="button">Reset (R)</button>
-      </div>
-      <div class="status" id="status"></div>
-    </div>
-    <div class="canvasWrap" id="wrap">
-      <canvas id="board" aria-label="Component editor"></canvas>
-      <div class="banner" id="banner" hidden>Reached f</div>
-    </div>
-  </main>
-
-  <aside class="panel" aria-label="Solver and export">
-    <section class="room-only">
-      <h2>Route check</h2>
-      <p class="hint" style="margin-top:0">Optional. Put a test start (s) and test finish (f) in this room and check whether you can get from one to the other. They are only for testing and don't appear in the level.</p>
-      <div class="row" style="margin-top:8px"><button id="checkRoute" type="button">Check s ↔ f</button></div>
-    </section>
-    <section>
-      <h2>Solver</h2>
-      <div id="verdict" class="verdict"><strong>…</strong><p></p></div>
-    </section>
-    <section>
-      <table id="results"><tbody></tbody></table>
-      <ul class="warn" id="warnings"></ul>
-    </section>
-    <section class="comp-only">
-      <h2>Export</h2>
-      <pre id="exportOut"></pre>
-      <div class="row" style="margin-top:8px">
-        <button id="copyExport" type="button">Copy code</button>
-        <button class="ghost" id="saveLib" type="button">Save to library</button>
-      </div>
-    </section>
-    <section class="comp-only">
-      <h2>Library <span id="libCount"></span></h2>
-      <ul class="lib" id="lib"></ul>
-      <div class="row" style="margin-top:8px">
-        <button class="ghost" id="copyLib" type="button">Copy whole library</button>
-      </div>
-    </section>
-    <section class="comp-only">
-      <h2><label for="importText">Import</label></h2>
-      <textarea id="importText" rows="5" placeholder="Paste ASCII rows or an exported component"></textarea>
-      <div class="row" style="margin-top:8px">
-        <button class="ghost" id="importBtn" type="button">Load into editor</button>
-        <span class="status" id="importMsg"></span>
-      </div>
-    </section>
-    <section class="room-only">
-      <h2>World</h2>
-      <p class="hint" style="margin-top:0">All 25 rooms are saved in this browser as you work. Copy the world to keep a backup or to send it over for the game.</p>
-      <div class="row" style="margin-top:8px"><button id="copyWorld" type="button">Copy world</button></div>
-      <textarea id="worldText" rows="4" placeholder="Paste an exported world" style="margin-top:10px"></textarea>
-      <div class="row" style="margin-top:8px">
-        <button class="ghost" id="loadWorld" type="button">Load world</button>
-        <span class="status" id="worldMsg"></span>
-      </div>
-    </section>
-  </aside>
-</div>
-
-<script>
-/*ENGINE*/
-/*SPRITES*/
-/*COMP*/
-/*LIB*/
-</script>
-<script>
+// Squirrel level designer: room mode (hand-made world) and component mode (single puzzle pieces).
 (() => {
   const E = ENGINE();
   const $ = id => document.getElementById(id);
   const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
   const C = {};
-  ["ground","floor","line","wall","ink","muted","gate","exit","player","crate","door","rail","bad","ice","ice-line","snow"].forEach(k => C[k] = css("--" + k));
+  ["gate", "player"].forEach(k => C[k] = css("--" + k));
   const TS = 8;                    // one 8x8 sprite per tile; the canvas is scaled up with crisp pixels
   const SP = SPRITES();
   const DEF_UNDER = { c: "_", "=": "-", "║": "|", "*": "_", "1": "_", "2": "_", "3": "_", "4": "_", "5": "_" };
@@ -420,7 +123,7 @@ pre#exportOut {
 
   // All graphics come from the 8x8 spritesheet (see SPRITES)
   function gapMaskOf(L, i) { let m = 0; for (let d = 0; d < 4; d++) { const n = E.nb(L, i, d); if (n >= 0 && L.terr[n] !== "w") m |= 1 << d; } return m; }
-  function drawTile(ctx, L, i, x, y) { SP.tile(ctx, L, i, x, y, { gapMask: L.terr[i] === "o" ? gapMaskOf(L, i) : 0, gate: L.terr[i] === "e" ? 3 : 0, ports: true }); }
+  function drawTile(ctx, L, i, x, y) { SP.tile(ctx, L, i, x, y, { gapMask: L.terr[i] === "o" ? gapMaskOf(L, i) : 0, ports: true }); }
   function drawObj(ctx, k, fx, fy) { SP.obj(ctx, k, fx, fy); }
 
   function render() {
@@ -452,7 +155,6 @@ pre#exportOut {
       }
     }
   }
-  const lerp = (a, b, k) => a + (b - a) * k;
 
   function fit() {
     const wrap = $("wrap");
@@ -802,12 +504,6 @@ pre#exportOut {
 
   function warningsFor(r) {
     const w = [];
-    const L = levelOf(ed);
-    for (const [ch, cell] of [["s", L.s], ["f", L.f]]) {
-      if (cell < 0 || kind === "room") continue;
-      const x = cell % ed.W, y = (cell / ed.W) | 0;
-      if (!(x === 0 || y === 0 || x === ed.W - 1 || y === ed.H - 1)) w.push(`${ch} is not on the outer edge, so the game can't connect a corridor to it.`);
-    }
     if (r && !r.error) {
       if (r.sf.ok && r.sf.pushes === 0) w.push("s → f needs no pushes: the player can walk straight through.");
       if (r.fs.ok && r.fs.pushes === 0) w.push("f → s needs no pushes: the player can walk straight through.");
@@ -878,18 +574,25 @@ pre#exportOut {
   function copyText(text, btn) {
     const done = () => { const o = btn.textContent; btn.textContent = "Copied"; setTimeout(() => btn.textContent = o, 1200); };
     const fallback = () => {
-      const r = document.createRange(); r.selectNodeContents($("exportOut"));
-      $("exportOut").textContent = text;
-      const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r);
-      flash("Copy blocked here. The code is selected: press Ctrl+C.");
+      if (kind === "room") { $("worldText").value = text; $("worldText").select(); }
+      else {
+        const r = document.createRange(); r.selectNodeContents($("exportOut"));
+        $("exportOut").textContent = text;
+        const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r);
+      }
+      flash("Copy blocked here. The text is selected: press Ctrl+C.");
     };
     try { navigator.clipboard.writeText(text).then(done, fallback); } catch (e) { fallback(); }
   }
   $("copyExport").addEventListener("click", () => copyText(fmtComponent(componentData()), $("copyExport")));
 
   let library = [];
-  const LIB_KEY = "tfr-designer-library", DRAFT_KEY = "tfr-designer-draft";
-  function loadStore(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } }
+  const LIB_KEY = "squirrel-designer-library", DRAFT_KEY = "squirrel-designer-draft";
+  // Older builds used "tfr-" keys; read those once if the new key is empty.
+  const OLD_KEYS = { "squirrel-designer-library": "tfr-designer-library", "squirrel-designer-draft": "tfr-designer-draft", "squirrel-world": "tfr-world", "squirrel-designer-kind": "tfr-designer-kind" };
+  function loadStore(k) {
+    try { return JSON.parse(localStorage.getItem(k) ?? (OLD_KEYS[k] ? localStorage.getItem(OLD_KEYS[k]) : null)); } catch (e) { return null; }
+  }
   function saveStore(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
   function saveDraft() { if (kind === "room") { commitView(); saveWorldSoon(); } else saveStore(DRAFT_KEY, ed); }
   function renderLib() {
@@ -957,7 +660,7 @@ pre#exportOut {
   // and writes every change straight back into the world.
   // =====================================================================
   const RN = 5, RS = 20, GW = RN * (RS - 1) + 1, COLS = "ABCDE";
-  const WORLD_KEY = "tfr-world", KIND_KEY = "tfr-designer-kind";
+  const WORLD_KEY = "squirrel-world", KIND_KEY = "squirrel-designer-kind";
   let world = null, cur = [2, 2], compEd = null, roomEd = null, stamp = { pick: "", t: 0 };
   const gidx = (gx, gy) => gy * GW + gx;
   const origin = (rx, ry) => [rx * (RS - 1), ry * (RS - 1)];
@@ -1213,8 +916,10 @@ pre#exportOut {
   $("kindRoom").addEventListener("click", () => setKind("room"));
   $("kindComp").addEventListener("click", () => setKind("comp"));
 
-  // ---- world export / import ----
-  function worldJSON() {
+  // ---- world file (data/world.js) ----
+  // The game plays WORLD_DATA from data/world.js. The designer starts from it when nothing is saved in this
+  // browser, and "Copy world" / "Download world.js" produce a complete replacement for that file.
+  function worldData() {
     commitView();
     const { map, under } = toMap({ W: GW, H: GW, terr: world.terr, obj: world.obj });
     const tests = {};
@@ -1227,63 +932,55 @@ pre#exportOut {
     const st = world.start >= 0 ? [world.start % GW, (world.start / GW) | 0] : null;
     return `{\n  "version": 1,\n  "rooms": ${RN},\n  "roomSize": ${RS},\n  "start": ${JSON.stringify(st)},\n  "map": [\n${map.map(l => "    " + JSON.stringify(l)).join(",\n")}\n  ],\n  "under": ${JSON.stringify(under)},\n  "tests": ${JSON.stringify(tests)}\n}`;
   }
-  $("copyWorld").addEventListener("click", () => copyText(worldJSON(), $("copyWorld")));
+  const worldFile = () => `// The world played by the game (index.html). The designer (designer.html) also starts from it\n// when nothing is saved in the browser. Replace this whole file with the designer's "Copy world"\n// or "Download world.js" to update the game.\nconst WORLD_DATA = ${worldData()};\n`;
+  // WORLD_DATA-style object -> editor world
+  function worldFromData(w) {
+    if (!w || !Array.isArray(w.map) || w.map.length !== GW || w.map.some(l => [...l].length !== GW)) throw new Error("size");
+    const m = fromMap(w.map, w.under || {});
+    const nw = { terr: m.terr, obj: m.obj, start: w.start ? gidx(w.start[0], w.start[1]) : -1, rooms: {} };
+    for (const [k, t] of Object.entries(w.tests || {})) {
+      const [rx, ry] = k.split(",").map(Number), [ox, oy] = origin(rx, ry);
+      nw.rooms[k] = { s: t.s ? (t.s[1] - oy) * RS + (t.s[0] - ox) : -1, f: t.f ? (t.f[1] - oy) * RS + (t.f[0] - ox) : -1, found: null };
+    }
+    return nw;
+  }
+  function useWorld(nw, msg) {
+    world = nw; history = []; loadView(); updateRoomLabel(); drawOverview(); markUnchecked(); render(); saveWorld();
+    $("worldMsg").textContent = msg;
+  }
+  $("copyWorld").addEventListener("click", () => copyText(worldFile(), $("copyWorld")));
+  $("downloadWorld").addEventListener("click", () => {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([worldFile()], { type: "text/javascript" }));
+    a.download = "world.js"; document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  });
+  $("reloadWorld").addEventListener("click", () => {
+    try { useWorld(worldFromData(typeof WORLD_DATA !== "undefined" ? WORLD_DATA : null), "Loaded data/world.js"); }
+    catch (e) { $("worldMsg").textContent = "data/world.js is missing or not a 96×96 world."; }
+  });
   $("loadWorld").addEventListener("click", () => {
     try {
-      const w = JSON.parse($("worldText").value);
-      if (!Array.isArray(w.map) || w.map.length !== GW || w.map.some(l => [...l].length !== GW)) throw new Error("size");
-      const m = fromMap(w.map, w.under || {});
-      const nw = { terr: m.terr, obj: m.obj, start: w.start ? gidx(w.start[0], w.start[1]) : -1, rooms: {} };
-      for (const [k, t] of Object.entries(w.tests || {})) {
-        const [rx, ry] = k.split(",").map(Number), [ox, oy] = origin(rx, ry);
-        nw.rooms[k] = { s: t.s ? (t.s[1] - oy) * RS + (t.s[0] - ox) : -1, f: t.f ? (t.f[1] - oy) * RS + (t.f[0] - ox) : -1, found: null };
-      }
-      world = nw; history = []; loadView(); updateRoomLabel(); drawOverview(); markUnchecked(); render(); saveWorld();
-      $("worldMsg").textContent = "World loaded";
+      const txt = $("worldText").value, a = txt.indexOf("{"), b = txt.lastIndexOf("}");
+      useWorld(worldFromData(JSON.parse(txt.slice(a, b + 1))), "World loaded");
     } catch (e) {
       $("worldMsg").textContent = e.message === "size" ? `A world is ${GW}×${GW} tiles.` : "Couldn't read that. Paste a copied world.";
     }
   });
 
   // ---------- boot ----------
-  const SHEET_KEY = "tfr-spritesheet";
-  try { const saved = localStorage.getItem(SHEET_KEY); if (saved) SP.setSheet(saved); } catch (e) {}
-  $("sheetFile").addEventListener("change", e => {
-    const f = e.target.files[0]; if (!f) return;
-    const rd = new FileReader();
-    rd.onload = () => {
-      const test = new Image();
-      test.onload = () => {
-        if (test.width < 128 || test.height < 128) { $("sheetMsg").textContent = "The sheet must be at least 128×128 pixels."; return; }
-        SP.setSheet(rd.result); $("sheetMsg").textContent = `Using ${f.name}`;
-        try { localStorage.setItem(SHEET_KEY, rd.result); } catch (err) {}
-      };
-      test.onerror = () => { $("sheetMsg").textContent = "Couldn't read that image. Use a PNG."; };
-      test.src = rd.result;
-    };
-    rd.readAsDataURL(f);
-    e.target.value = "";
-  });
-  $("sheetReset").addEventListener("click", () => {
-    SP.setSheet(SPRITE_SHEET_DEFAULT); $("sheetMsg").textContent = "Using the built-in sheet.";
-    try { localStorage.removeItem(SHEET_KEY); } catch (err) {}
-  });
-
-  function start(data) {
-    const draft = data && data.ed || loadStore(DRAFT_KEY);
+  function fileWorld() { try { return typeof WORLD_DATA !== "undefined" ? worldFromData(WORLD_DATA) : null; } catch (e) { return null; } }
+  function start() {
+    const draft = loadStore(DRAFT_KEY);
     compEd = draft && draft.terr ? Object.assign({ theme: "warehouse" }, draft) : fromMap(["wwsww", "w___w", "w_c_w", "wcc_w", "w__ww", "wwfww"], {}, "Three crates");
     library = loadStore(LIB_KEY) || [];
-    world = (data && data.world) || loadWorld() || defaultWorld();
+    world = loadWorld() || fileWorld() || defaultWorld();
     if (world._cur) { cur = world._cur; delete world._cur; }
-    if (data && data.cur) cur = data.cur;
     renderLib();
-    const k = (data && data.kind) || loadStore(KIND_KEY) || "room";
-    kind = k === "comp" ? "comp" : "room";
+    kind = loadStore(KIND_KEY) === "comp" ? "comp" : "room";
     enterKind();
     SP.onReady(() => { buildTools(); render(); drawOverview(); });
     requestAnimationFrame(loop);
   }
-  window.claude?.hot?.snapshot?.(() => { if (kind === "room") commitView(); return { ed: kind === "comp" ? ed : compEd, world, kind, cur }; });
-  window.claude?.hot?.ready ? window.claude.hot.ready(start) : start(window.claude?.hot?.data ?? {});
+  start();
 })();
-</script>

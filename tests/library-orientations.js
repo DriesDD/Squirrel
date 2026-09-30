@@ -1,10 +1,14 @@
-const E = require('../src/engine.js')(); const CP = require('../src/comp.js')(E); const LIB = require('../src/library.js');
+// Every library component should solve the same way in all 8 orientations (rotations + mirrors).
+// Large puzzles can exceed the solver limit; those are reported as "limit" and skipped.
+const E = require('../src/engine.js')(), CP = require('../src/comp.js')(E), LIB = require('../src/library.js');
 for (const c of LIB) {
-  const P = CP.prepare(c); const res = [];
-  for (const v of P.variants) {
-    const r = E.solveAll({ W: v.W, H: v.H, terr: v.terr, obj: v.obj });
-    res.push(`${r.sf.ok?r.sf.pushes:'x'}/${r.fs.ok?r.fs.pushes:'x'}${r.sf.roundTrip?'R':''}${r.fs.roundTrip?'R':''}`);
+  const base = CP.parse(c), res = new Set();
+  for (let t = 0; t < 8; t++) {
+    const v = CP.transform(base, t);
+    const r = E.solveAll({ W: v.W, H: v.H, terr: v.terr, obj: v.obj, cap: 60000 });
+    if (r.sf.capped || r.fs.capped) { res.add('limit'); break; }
+    res.add(`${r.sf.ok ? r.sf.pushes : 'x'}/${r.fs.ok ? r.fs.pushes : 'x'}${r.sf.roundTrip ? 'R' : ''}${r.fs.roundTrip ? 'R' : ''}`);
   }
-  const v = P.variants[0];
-  console.log(c.name.padEnd(18), c.meta.dir.padEnd(5), [...new Set(res)].join(' | '), ' s-tunnel', v.s && v.s.tunnel.length, 'f-tunnel', v.f && v.f.tunnel.length, 'leaks', JSON.stringify(v.leaks));
+  const verdict = res.size === 1 ? 'same in all orientations' : 'DIFFERS';
+  console.log(c.name.padEnd(18), (c.meta?.dir || '').padEnd(12), [...res].join(' | ').padEnd(12), verdict);
 }

@@ -1,58 +1,59 @@
-# Squirrel (Twenty-Five Rooms)
+# Squirrel
 
-A top-down puzzle game in plain HTML and JavaScript. A squirrel moves through a 5 × 5 maze of rooms,
-pushing crates, sliding doors along rails, sliding across ice and rolling snowballs to find the way out.
+A top-down puzzle game in plain HTML and JavaScript. A squirrel explores a world of 5 × 5 rooms,
+pushing crates, sliding doors along rails, sliding across ice and rolling snowballs to find the exit.
 
-- `index.html` is the game.
-- `designer.html` is the level designer. It has two modes:
-  - **Rooms**: design the 25 rooms of the world by hand (20 × 20 tiles each; neighbouring rooms share their
-    outer row of tiles). Stamp in puzzle components (rotated or mirrored), set the player start and the exit,
-    optionally check a route between a test start `s` and test finish `f`, and play-test across rooms.
-    Work is saved in the browser automatically; **Copy world** exports it as JSON.
-  - **Component**: build a single puzzle piece, let the solver check both directions and the difficulty,
-    and export it for the library in `src/library.js`.
+Open the pages straight from disk; there is no build step. Edit a file, then refresh.
 
-Both pages are single self-contained files, so they work straight from disk or on GitHub Pages.
+- `index.html` plays the world in `data/world.js`.
+- `designer.html` is the level designer, with two modes:
+  - **Rooms**: design the 25 rooms by hand (20 × 20 tiles each; neighbouring rooms share their outer
+    row of tiles). Stamp in components from the library (rotated or mirrored), set the player start and
+    the exit, optionally check a route between a test start `s` and test finish `f`, and play-test the
+    whole world. Work is saved in the browser as you go.
+  - **Component**: build a single puzzle piece and let the solver check both directions and the difficulty.
+
+## Putting your world in the game
+
+In the designer's **World** panel, press **Download world.js** (or **Copy world**) and replace
+`data/world.js` with it. Refresh `index.html` to play it. **Reload data/world.js** in the designer
+loads the file back into the editor.
+
+## Editing the graphics
+
+All graphics are in `sprites/spritesheet.png`: 128 × 128 pixels, a grid of 16 × 16 slots of 8 × 8 sprites.
+Edit it at 1:1 in any pixel editor (Aseprite, Piskel, GIMP, …), save, and refresh the page.
+`SPRITE_MAP` at the top of `src/sprites.js` names each slot as `[column, row]`:
+
+| Row | Slots |
+| --- | --- |
+| 0 | `floor0`–`floor7` (soil), `wall0`–`wall7` (top of a dirt wall) |
+| 1 | `wallface0`–`wallface7` (wall with open floor below), `ice0`–`ice3`, `snow0`–`snow3` |
+| 2 | `gap0`–`gap15`: gapped wall, numbered by which sides are open (1 up, 2 right, 4 down, 8 left, added up) |
+| 3 | `rail_h`, `rail_v`, `rail_x`, `rail_n`, `rail_e`, `rail_s`, `rail_w` (half rails for gaps), `door_h`, `door_v`, `crate`, `port_s`, `port_f` (designer only) |
+| 4 | `ball1`–`ball4`, `snowwall` (slot 4), `exit0`, `exit1` (slots 7–8) |
+| 5–7 | squirrel facing down, sideways (right; left is mirrored) and up: frame 0 standing, 1–3 running |
+
+Rows 8–15 and the other empty slots are free. Numbered names are random variants of one sprite:
+to add a variant, draw it in a free slot and add e.g. `floor8: [col, row]` to `SPRITE_MAP`.
 
 ## Project layout
 
 | Path | What it is |
 | --- | --- |
-| `src/engine.js` | Rules engine shared by game and designer: movement, pushing, ice, snow, and the solver. |
-| `src/comp.js` | Reads components from their ASCII maps and produces the 8 rotations/mirrors. |
-| `src/library.js` | The component library (ASCII maps + solver metadata). |
-| `src/world.js`, `src/roomgen.js` | Seeded maze and procedural room generation (the game's current mode). |
-| `src/main.js` | Game UI, rendering and input. |
-| `src/sprites.template.js` | Sprite renderer; the build fills in the sheet and its map. |
-| `src/game.template.html`, `src/designer.template.html` | Page markup and styles for the two pages. |
-| `sprites/spritesheet.png` | The 128 × 128 spritesheet (16 × 16 slots of 8 × 8). Edit this. |
-| `sprites/sprites.json` | Sprite names → `[column, row]` slots. |
-| `sprites/spritesheet-guide.png` | The sheet enlarged with every slot labelled. |
-| `sprites/make_sheet.py` | Generates the default sheet, map and guide (needs Pillow). |
-| `tests/` | Node scripts that check the rules, the library and room generation. |
+| `index.html`, `src/game.js` | The game: page and styles, and the game code. |
+| `designer.html`, `src/designer.js` | The designer: page and styles, and the designer code. |
+| `src/engine.js` | Rules shared by both: movement, pushing, ice, snow, and the solver. |
+| `src/sprites.js` | Sprite map and renderer. |
+| `src/comp.js` | Reads ASCII maps and makes the 8 rotations/mirrors of a component. |
+| `src/library.js` | Component library. Paste components exported from Component mode here. |
+| `data/world.js` | The world the game plays. |
+| `sprites/spritesheet.png` | The spritesheet. |
+| `tests/` | Node checks: `node tests/rules.js`, `node tests/library-orientations.js` (slow). |
 
-## Building
-
-```sh
-python3 build.py
-```
-
-This inlines the scripts and the spritesheet into `index.html` and `designer.html`.
-After editing `sprites/spritesheet.png` by hand, keep each sprite in its slot (or update `sprites/sprites.json`)
-and run the build again. Both pages can also load an edited sheet at runtime with **Load spritesheet**.
-
-## Tests
-
-```sh
-node tests/rules.js                 # push, ice and snowball rules on small cases
-node tests/library-orientations.js  # every library piece solves the same in all 8 orientations
-node tests/room-objects.js          # generated rooms never place objects on invalid tiles
-node tests/room-generation.js       # stress test of procedural rooms (slow)
-```
-
-## Tile characters
+## Map characters
 
 Terrain: `w` wall · `_` floor · `o` gapped wall · `-` `|` `+` rails · `~` ice · `h` `v` `x` ice with rails ·
-`e` exit · `s` `f` test start/finish.
+`e` exit · `s` `f` test start/finish (components and route checks only).
 Objects: `c` crate · `=` `║` sliding doors · `*` snow · `1`–`5` snowball sizes (5 is a snow wall).
-Objects standing on something other than plain floor record the tile underneath in `under`.
+An object standing on something other than plain floor records the tile underneath in `under`.

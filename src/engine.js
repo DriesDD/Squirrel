@@ -1,4 +1,4 @@
-// Shared rules engine + solver for Twenty-Five Rooms puzzle components.
+// Rules engine + solver for Squirrel, shared by the game and the designer.
 // Written as one self-contained function so it can be stringified into a Web Worker.
 //
 // Terrain:  w wall · _ floor · o gapped wall · s/f ports · - | + rails
@@ -202,12 +202,12 @@ function ENGINE() {
   }
 
   // One player move from p in direction d. Returns null when nothing happens.
-  // { p, obj, crates (heavy pieces pushed), changed (objects changed), moves [{from,to,k}], dist, anim }
+  // { p, obj, crates (heavy pieces pushed), changed (objects changed), anim }
   // anim (only when track): { T, player: [[t, cell]...], ents: [{ k0, ks, frames, dead, end }] }
   function step(L, p, obj, d, track = true) {
     const t = nb(L, p, d);
     if (t < 0 || !WALK[L.terr[t]]) return null;
-    if (!L.hasIce && !obj[t] && !track) return { p: t, obj, crates: 0, changed: false, moves: [], dist: 1 };
+    if (!L.hasIce && !obj[t] && !track) return { p: t, obj, crates: 0, changed: false };
     const S = { o: obj.slice(), tr: null, changed: false };
     if (track) {
       S.tr = { id: new Int32Array(L.N).fill(-1), ents: [], player: { frames: [[0, p]] } };
@@ -222,17 +222,13 @@ function ENGINE() {
     }
     pmove(S, p, t, 0);
     const pp = slidePlayer(L, S, t, d, 1);
-    const out = { p: pp, obj: S.changed ? S.o : obj, crates: hv, changed: S.changed, moves: [], dist: 1 };
+    const out = { p: pp, obj: S.changed ? S.o : obj, crates: hv, changed: S.changed };
     if (track) {
       const tr = S.tr;
       for (let i = 0; i < L.N; i++) if (tr.id[i] >= 0) tr.ents[tr.id[i]].end = i;
       const ents = tr.ents.filter(e => e.frames.length > 1 || e.dead !== null || e.ks.length > 1);
       let T = tr.player.frames[tr.player.frames.length - 1][0];
-      for (const e of ents) {
-        T = Math.max(T, e.frames[e.frames.length - 1][0], e.dead ?? 0, e.ks[e.ks.length - 1][0]);
-        if (e.end >= 0 && e.frames.length > 1) out.moves.push({ from: e.frames[0][1], to: e.end, k: S.o[e.end] });
-      }
-      out.dist = T;
+      for (const e of ents) T = Math.max(T, e.frames[e.frames.length - 1][0], e.dead ?? 0, e.ks[e.ks.length - 1][0]);
       out.anim = { T, player: tr.player, ents };
     }
     return out;
@@ -389,6 +385,6 @@ function ENGINE() {
     return { sf, fs, ms: Date.now() - t0 };
   }
 
-  return { DX, DY, WALK, CRATE_OK, ICE, KIND, CH, MAX_CRATES, build, nb, step, animAt, walkPath, solveAll, snowVal };
+  return { DX, DY, WALK, CRATE_OK, KIND, CH, build, nb, step, animAt, solveAll };
 }
 if (typeof module !== "undefined") module.exports = ENGINE;
