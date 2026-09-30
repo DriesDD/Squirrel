@@ -153,7 +153,11 @@ function NPCS(E, SP) {
     // Then it picks a straight line nearby that crosses no walls, flies to one end, zips back and forth
     // along it 1-3 times, and returns home to sit again. It ignores the player.
     // -------------------------------------------------------------------------------------------
-    const DFLY = { SIT_MS: [3000, 9000], SPEED: 9, RANGE: 3, LINE: [5, 9], PASSES: [1, 3], LIFT: 3 };
+    // Dragonfly: sits on its home tile, then patrols a straight line along the grid (up/down or left/right):
+    // it flies straight to the nearest point of the line, on to one end, back and forth between the ends
+    // PASSES times, and straight home. Walls block every part of the flight. It flies off when you come
+    // within FLEE tiles of it while it sits, and won't land while you are that close to home.
+    const DFLY = { SIT_MS: [3000, 9000], SPEED: 9, RANGE: 3, LINE: [5, 9], PASSES: [1, 3], LIFT: 3, FLEE: 2 };
     const open = (x, y) => {
       const tx = Math.round(x), ty = Math.round(y);
       if (tx < 0 || ty < 0 || tx >= W || ty >= L.H) return false;
@@ -161,15 +165,24 @@ function NPCS(E, SP) {
       return t !== "w" && t !== "o";
     };
     const clearLine = (a, b) => { const n = Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) * 4) + 1; for (let i = 0; i <= n; i++) if (!open(a[0] + (b[0] - a[0]) * i / n, a[1] + (b[1] - a[1]) * i / n)) return false; return true; };
-    function planFlight(f) {
+    const playerNear = (x, y, r) => { if (playerCell < 0) return false; const [px, py] = at(playerCell); return Math.abs(px - x) + Math.abs(py - y) <= r; };
+    // avoid: stay away from the player (when fleeing, the whole line has to be out of reach)
+    function planFlight(f, avoid) {
       const [hx, hy] = at(f.home);
-      for (let tries = 0; tries < 80; tries++) {   // long lines don't always fit: later tries use shorter ones
-        const A = [hx + rand(-DFLY.RANGE, DFLY.RANGE), hy + rand(-DFLY.RANGE, DFLY.RANGE)];
-        const ang = rand(0, Math.PI * 2), len = rand(...DFLY.LINE) * Math.max(0.3, 1 - tries / 80);
-        const B = [A[0] + Math.cos(ang) * len, A[1] + Math.sin(ang) * len];
-        if (!clearLine([f.x, f.y], A) || !clearLine(A, B) || !clearLine(A, [hx, hy])) continue;
-        const path = [A];
-        for (let k = Math.round(rand(DFLY.PASSES[0], DFLY.PASSES[1] + 0.49)); k > 0; k--) path.push(B, A);
+      for (let tries = 0; tries < 120; tries++) {   // long lines don't always fit: later tries use shorter ones
+        const ax = hx + Math.round(rand(-DFLY.RANGE, DFLY.RANGE)), ay = hy + Math.round(rand(-DFLY.RANGE, DFLY.RANGE));
+        const len = Math.max(2, Math.round(rand(...DFLY.LINE) * Math.max(0.3, 1 - tries / 120)));
+        const d = Math.floor(Math.random() * 4), A = [ax, ay], B = [ax + E.DX[d] * len, ay + E.DY[d] * len];
+        if (!clearLine(A, B)) continue;
+        if (avoid && (playerNear(A[0], A[1], DFLY.FLEE + 1) || playerNear(B[0], B[1], DFLY.FLEE + 1))) continue;
+        // nearest point of the line from where the dragonfly is now
+        const horiz = (d & 1) === 1, lo = horiz ? Math.min(A[0], B[0]) : Math.min(A[1], B[1]), hi = horiz ? Math.max(A[0], B[0]) : Math.max(A[1], B[1]);
+        const P = horiz ? [Math.min(hi, Math.max(lo, f.x)), ay] : [ax, Math.min(hi, Math.max(lo, f.y))];
+        if (!clearLine([f.x, f.y], P)) continue;
+        const [e1, e2] = Math.random() < .5 ? [A, B] : [B, A];
+        const path = [P, e1];
+        for (let k = Math.round(rand(DFLY.PASSES[0], DFLY.PASSES[1] + 0.49)); k > 0; k--) path.push(e2, e1);
+        if (!clearLine(e1, [hx, hy])) continue;
         path.push([hx, hy]);
         return path;
       }
@@ -180,11 +193,19 @@ function NPCS(E, SP) {
       create(n) { const [x, y] = at(n.cell); return { type: "dragonfly", home: n.cell, cell: n.cell, x, y, mode: "sit", until: performance.now() + rand(...DFLY.SIT_MS), path: [], dir: 2, last: performance.now() }; },
       update(f, now) {
         const dt = Math.min(0.1, (now - f.last) / 1000); f.last = now;
+        const [hx, hy] = at(f.home);
         if (f.mode === "sit") {
-          if (now < f.until) return;
-          const path = planFlight(f);
+          const scared = playerNear(hx, hy, DFLY.FLEE);
+          if (now < f.until && !scared) return;
+          const path = planFlight(f, scared) || (scared ? planFlight(f, false) : null);
           if (path) { f.path = path; f.mode = "fly"; } else f.until = now + rand(...DFLY.SIT_MS);
           return;
+        }
+        // about to head home with the player right there: patrol somewhere else first
+        if (f.path.length === 1 && f.path[0][0] === hx && f.path[0][1] === hy && playerNear(hx, hy, DFLY.FLEE) && now >= (f.recheck || 0)) {
+          f.recheck = now + 500;
+          const again = planFlight(f, true);
+          if (again) f.path = again;
         }
         const [tx, ty] = f.path[0], dx = tx - f.x, dy = ty - f.y, d = Math.hypot(dx, dy), step = DFLY.SPEED * dt;
         if (d > 0.01) f.dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 1 : 3) : (dy > 0 ? 2 : 0);
@@ -194,7 +215,7 @@ function NPCS(E, SP) {
         } else { f.x += dx / d * step; f.y += dy / d * step; }
         f.cell = Math.round(f.y) * W + Math.round(f.x);
       },
-      playerMoved() {},
+      playerMoved() {},   // checked every frame in update
       draw(ctx, f, now, ox, oy) {
         const flying = f.mode === "fly", bob = flying ? Math.sin(now / 70) * 0.6 : 0;
         SP.draw(ctx, (flying ? "dragonfly_fly" : "dragonfly_sit") + f.dir, (f.x - ox) * 8, (f.y - oy) * 8 - DFLY.LIFT + bob);

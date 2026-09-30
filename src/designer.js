@@ -250,14 +250,14 @@
     if (kind === "room" && e.button !== 2 && tool === "p") { setPlayerStart(i); edited(); return; }
     if (kind === "room" && e.button !== 2 && (tool === "g" || tool === "d")) { toggleNPC(i, tool === "g" ? "frog" : "dragonfly"); edited(); return; }
     painting = true; paintTool = e.button === 2 ? "_" : tool; lastCell = i;
-    paint(i, paintTool, true); edited();
+    paint(i, paintTool, true); clearNPC(i, paintTool); edited();
   });
   board.addEventListener("pointermove", e => {
     const i = cellAt(e);
     if (mode === "edit" && i !== hover) { hover = i; updateStatus(); render(); }
     if (!painting || i < 0 || i === lastCell) return;
     if (paintTool === "s" || paintTool === "f" || paintTool === "p" || paintTool === "stamp") return;
-    lastCell = i; paint(i, paintTool); edited();
+    lastCell = i; paint(i, paintTool); clearNPC(i, paintTool); edited();
   });
   const stopPaint = () => { painting = false; };
   board.addEventListener("pointerup", stopPaint);
@@ -813,6 +813,13 @@
     if (type === "frog" && (!(L.water[i] || E.WALK[L.eff[i]]) || ed.obj[i])) { flash("A frog needs open water or ground it can stand on."); return; }
     if (type === "dragonfly" && (L.eff[i] === "w" || L.eff[i] === "o")) { flash("A dragonfly can't live inside a wall. Put it on reeds."); return; }
     world.npcs.push({ type, g });
+  }
+  // floor (also the right mouse button) and walls painted over a creature remove it
+  function clearNPC(i, t) {
+    if (kind !== "room" || (t !== "_" && t !== "w")) return;
+    const [ox, oy] = origin(...cur), g = gidx(ox + i % RS, oy + ((i / RS) | 0));
+    const at = world.npcs.findIndex(n => n.g === g);
+    if (at >= 0) world.npcs.splice(at, 1);
   }
   function drawRoomNPCs() {
     const [ox, oy] = origin(...cur), L = levelOf(ed);

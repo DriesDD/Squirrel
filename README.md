@@ -73,14 +73,17 @@ An object standing on something other than plain floor records the tile undernea
 ## NPCs
 
 The world file lists NPCs as `"npcs": [{ "type": "frog", "x": 42, "y": 44 }]` (world tile coordinates); place them
-with the Frog and Dragonfly tools in the designer (room mode; click an NPC again to remove it).
+with the Frog and Dragonfly tools in the designer (room mode). Click a creature again, right-click it, or paint floor
+or wall over it to remove it.
 
 - Frogs are passive: they hop between spots near water (2–4 tiles per jump on land) and swim a little, with long rests
   in between. They climb onto big lily pads, jump into the nearest water when you come within 6 tiles on land, and
   swim away (or dive) when you come within 3 tiles in the water. Tuning: the `FROG` object in `src/npc.js`.
-- Dragonflies remember their home tile (put them on reeds). They sit near the top of it for a while, then pick a
-  short line nearby that doesn't cross a wall, fly to its start, dart back and forth along it 1–3 times, and return
-  to sit (their lines are 5–9 tiles long when there is room, shorter when there isn't). They fly above everything, including the reeds. Tuning: the `DFLY` object in `src/npc.js`.
+- Dragonflies remember their home tile (put them on reeds). They sit near the top of it for a while, then patrol a
+  straight line on the grid (up/down or left/right, 5–9 tiles when there is room): they fly straight to the nearest
+  point of the line, on to one end, back and forth between the ends 1–3 times, and straight home. No part of the
+  flight crosses a wall. Come within 2 tiles of a sitting dragonfly and it flies off, and it won't land while you
+  stay that close to home. They fly above everything, including the reeds. Tuning: the `DFLY` object in `src/npc.js`.
 
 A new kind of NPC is a new entry in `BEHAVIOURS` there.
 
