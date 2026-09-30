@@ -65,7 +65,7 @@ to add a variant, draw it in a free slot and add e.g. `floor8: [col, row]` to `S
 Terrain: `w` wall · `_` floor · `o` gapped wall · `-` `|` `+` rails · `~` ice · `h` `v` `x` ice with rails ·
 `≈` water · `e` exit · `s` `f` test start/finish (components and route checks only).
 Overlays, drawn on another tile (water by default, floor for reeds; `under` records any other): `@` big lily pad
-(walkable) · `%` small lily leaves (blocks) · `&` lily flower (blocks) · `;` reeds (walk through; they follow the rules
+(walkable, and crates and snowballs can be pushed onto it) · `%` small lily leaves (blocks) · `&` lily flower (blocks) · `;` reeds (walk through; they follow the rules
 of the tile under them).
 Objects: `c` crate · `=` `║` sliding doors · `*` snow · `1`–`5` snowball sizes (5 is a snow wall).
 An object standing on something other than plain floor records the tile underneath in `under`.

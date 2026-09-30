@@ -81,3 +81,5 @@ ts('snow pile pushed into water is gone', ['@*≈_'], [R], '_@≈_ splashes=2');
 ts('small ball rolls onto a sunk crate', ['@c≈_', '__1_', '____'], [R, D, D, R, 0], '__1___@_____ splashes=2');
 ts('crate slides off ice into water', ['@c~~≈≈'], [R], '_@~~#≈ splashes=4');
 ts('door cannot enter water', ['@=≈'], [R], '@=≈ splashes=');
+ts('crate pushed onto a big lily pad stays on it', ['@c@≈'], [R], '_@c≈ splashes=');
+ts('snowball pushed onto a big lily pad', ['@3@≈'], [R], '_@3≈ splashes=');

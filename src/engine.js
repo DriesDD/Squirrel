@@ -28,7 +28,7 @@ function ENGINE() {
   const WALK = { "_": 1, "-": 1, "|": 1, "+": 1, "s": 1, "f": 1, "e": 1, "~": 1, "h": 1, "v": 1, "x": 1, "@": 1 };   // e = level exit, @ = big lily pad
   const WATER = "≈";
   const OVERLAY_BASE = { ";": "_", "@": WATER, "%": WATER, "&": WATER };   // default tile under each overlay
-  const CRATE_OK = { "_": 1, "-": 1, "|": 1, "+": 1, "~": 1, "h": 1, "v": 1, "x": 1 };
+  const CRATE_OK = { "_": 1, "-": 1, "|": 1, "+": 1, "~": 1, "h": 1, "v": 1, "x": 1, "@": 1 };   // @ = big lily pad
   const ICE = { "~": 1, "h": 1, "v": 1, "x": 1 };
   const KIND = { "c": 1, "=": 2, "║": 3, "*": 4, "1": 5, "2": 6, "3": 7, "4": 8, "5": 9 };
   const CH = ["", "c", "=", "║", "*", "1", "2", "3", "4", "5"];
