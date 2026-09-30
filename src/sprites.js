@@ -26,7 +26,12 @@ const SPRITE_MAP = {   // name: [column, row] of the 8x8 slot
   water0: [0, 8], water1: [1, 8], water2: [2, 8], water3: [3, 8], splash0: [4, 8], splash1: [5, 8], splash2: [6, 8], splash3: [7, 8], lilypad0: [8, 8], lilypad1: [9, 8], lilyleaves0: [10, 8], lilyleaves1: [11, 8], lilyflower: [12, 8],
   // row 9: reeds, frog (facing right; left is mirrored): jump frames sit/crouch/air/land, swim frames
   reeds0: [0, 9], reeds1: [1, 9], reeds2: [2, 9], reeds3: [3, 9], frog_jump0: [4, 9], frog_jump1: [5, 9], frog_jump2: [6, 9], frog_jump3: [7, 9], frog_swim0: [8, 9], frog_swim1: [9, 9], frog_swim2: [10, 9], frog_swim3: [11, 9],
+  // row 10: second water animation; dragonfly perched and flying, one sprite per direction (0 up, 1 right, 2 down, 3 left)
+  waterB0: [0, 10], waterB1: [1, 10], waterB2: [2, 10], waterB3: [3, 10],
+  dragonfly_sit0: [4, 10], dragonfly_sit1: [5, 10], dragonfly_sit2: [6, 10], dragonfly_sit3: [7, 10],
+  dragonfly_fly0: [8, 10], dragonfly_fly1: [9, 10], dragonfly_fly2: [10, 10], dragonfly_fly3: [11, 10],
 };
+const WATER_SETS = ["water", "waterB"];   // water animations; each water tile uses one, possibly mirrored
 const WATER_FRAME_MS = 320;   // water animation speed
 const SPLASH_FRAME_MS = 90;   // splash ripple speed (4 frames)
 function SPRITES() {
@@ -39,8 +44,9 @@ function SPRITES() {
   const variantCount = {};
   for (const name in SPRITE_MAP) { const m = name.match(/^(.*?)(\d+)$/); if (m) variantCount[m[1]] = Math.max(variantCount[m[1]] || 0, +m[2] + 1); }
   // Mostly variant 0, the others now and then, so large areas look even with small random differences.
-  function variant(base, x, y) {
-    const n = variantCount[base] || 1, h = hash(x, y, base.length);
+  // salt picks a different (but still fixed) choice for the same tile
+  function variant(base, x, y, salt = 0) {
+    const n = variantCount[base] || 1, h = hash(x, y, base.length + salt * 31);
     if (n === 1 || (h % 100) < 45) return base + "0";
     return base + (1 + ((h >>> 8) % (n - 1)));
   }
@@ -105,7 +111,8 @@ function SPRITES() {
     const b = baseOf(L, i);
     if (b === WATER) {
       if (opts.now === undefined) return;
-      draw(ctx, "water" + (Math.floor(opts.now / WATER_FRAME_MS) % 4), X, Y);
+      const set = WATER_SETS[hash(x, y, 11) % WATER_SETS.length];
+      draw(ctx, set + (Math.floor(opts.now / WATER_FRAME_MS) % 4), X, Y, (hash(x, y, 13) & 1) === 1);
     } else {
       draw(ctx, variant(b === "e" ? "exit" : L.ice[i] ? "ice" : "floor", x, y), X, Y, flip);
       if (L.hAx[i] && L.vAx[i]) draw(ctx, "rail_x", X, Y);
@@ -121,7 +128,8 @@ function SPRITES() {
   // so anything standing in them is half hidden. layer is "back" or "front".
   function reeds(ctx, L, i, x, y, layer) {
     if (L.terr[i] !== ";") return;
-    draw(ctx, variant("reeds", x, y), x * 8, y * 8 + (layer === "back" ? -3 : 2), (hash(x, y, 5) & 1) === 1);
+    const back = layer === "back";   // the two copies use independently chosen variants
+    draw(ctx, variant("reeds", x, y, back ? 0 : 1), x * 8, y * 8 + (back ? -3 : 2), (hash(x, y, back ? 5 : 6) & 1) === 1);
   }
   // splash ripple that started `ms` milliseconds ago; returns false once it has finished
   function splash(ctx, fx, fy, ms) {

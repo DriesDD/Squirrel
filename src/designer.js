@@ -38,6 +38,7 @@
     { ch: "p", name: "Player start", key: "p", room: true },
     { ch: "e", name: "Exit", key: "e", room: true },
     { ch: "g", name: "Frog", key: "g", room: true },
+    { ch: "d", name: "Dragonfly", key: "d", room: true },
   ];
   const DIR_LABEL = {
     both: ["Two-way", "Passable from either side, and the player can always get back out the way they came."],
@@ -250,7 +251,7 @@
     pushHistory();
     if (kind === "room" && e.button !== 2 && tool === "stamp") { placeStamp(i); edited(); return; }
     if (kind === "room" && e.button !== 2 && tool === "p") { setPlayerStart(i); edited(); return; }
-    if (kind === "room" && e.button !== 2 && tool === "g") { toggleNPC(i, "frog"); edited(); return; }
+    if (kind === "room" && e.button !== 2 && (tool === "g" || tool === "d")) { toggleNPC(i, tool === "g" ? "frog" : "dragonfly"); edited(); return; }
     painting = true; paintTool = e.button === 2 ? "_" : tool; lastCell = i;
     paint(i, paintTool, true); edited();
   });
@@ -804,13 +805,14 @@
     ed.obj[i] = "";
     world.start = gidx(ox + i % RS, oy + ((i / RS) | 0));
   }
-  // NPCs (frogs) are placed by clicking; clicking one again removes it
+  // NPCs (frogs, dragonflies) are placed by clicking; clicking one again removes it
   function toggleNPC(i, type) {
     const [ox, oy] = origin(...cur), g = gidx(ox + i % RS, oy + ((i / RS) | 0));
     const at = world.npcs.findIndex(n => n.g === g);
     if (at >= 0) { world.npcs.splice(at, 1); return; }
     const L = levelOf(ed);
-    if (!(L.water[i] || E.WALK[L.eff[i]]) || ed.obj[i]) { flash("A frog needs open water or ground it can stand on."); return; }
+    if (type === "frog" && (!(L.water[i] || E.WALK[L.eff[i]]) || ed.obj[i])) { flash("A frog needs open water or ground it can stand on."); return; }
+    if (type === "dragonfly" && (L.eff[i] === "w" || L.eff[i] === "o")) { flash("A dragonfly can't live inside a wall. Put it on reeds."); return; }
     world.npcs.push({ type, g });
   }
   function drawRoomNPCs() {
@@ -818,7 +820,8 @@
     for (const n of world.npcs) {
       const x = n.g % GW - ox, y = ((n.g / GW) | 0) - oy;
       if (x < 0 || y < 0 || x >= RS || y >= RS) continue;
-      if (L.water[y * RS + x]) SP.drawSubmerged(bctx, "frog_swim0", x * 8, y * 8, false, 5, 1);
+      if (n.type === "dragonfly") SP.draw(bctx, "dragonfly_sit2", x * 8, y * 8 - 3);
+      else if (L.water[y * RS + x]) SP.drawSubmerged(bctx, "frog_swim0", x * 8, y * 8, false, 5, 1);
       else SP.draw(bctx, "frog_jump0", x * 8, y * 8);
     }
   }
@@ -961,6 +964,7 @@
     const walking = live && st.playerDir >= 0;
     SP.player(bctx, px - ox, py - oy, walking ? st.playerDir : play.facing, walking ? 1 + (Math.floor(now / 90) % 3) : 0, playerWet(L, px, py));
     for (let y = 0; y < RS; y++) for (let x = 0; x < RS; x++) SP.reeds(bctx, L, gidx(ox + x, oy + y), x, y, "front");
+    if (play.npc) play.npc.draw(bctx, now, ox, oy, RS, "air");
   }
 
   // ---- switching between room and component mode ----
@@ -972,7 +976,7 @@
     $("modeName").textContent = kind === "room" ? "Room designer" : "Component designer";
     $("board").setAttribute("aria-label", kind === "room" ? "Room editor" : "Component editor");
     history = []; hover = -1;
-    if (tool === "stamp" || (kind === "comp" && (tool === "p" || tool === "e" || tool === "g"))) tool = "w";
+    if (tool === "stamp" || (kind === "comp" && (tool === "p" || tool === "e" || tool === "g" || tool === "d"))) tool = "w";
     if (kind === "room") { loadView(); updateRoomLabel(); drawOverview(); refreshCompPick(); }
     else { ed = compEd; syncInputs(); }
     buildTools(); setTool(tool); fit(); render(); updateStatus();

@@ -99,6 +99,7 @@
     const wet = L.water[gidx(Math.round(px), Math.round(py))] === 1;
     SP.player(ctx, px - ox, py - oy, dir, moving ? 1 + (Math.floor(now / 90) % 3) : 0, wet);
     eachCell(ox, oy, (g, x, y) => SP.reeds(ctx, L, g, x, y, "front"));
+    NPC.draw(ctx, now, ox, oy, RS, "air");
     if (fade > 0 && fadeFrom) { ctx.globalAlpha = fade; ctx.drawImage(fadeFrom, 0, 0); ctx.globalAlpha = 1; }
   }
 
@@ -206,7 +207,7 @@
     $("steps").textContent = S.steps;
     $("undoBtn").disabled = !hist.length;
   }
-  const LEGEND = { water: ["water0"], lilypad: ["water0", "lilypad0"], reeds: ["floor0", "reeds0"], frog: ["frog_jump0"], crate: ["floor0", "crate"], door: ["floor0", "rail_h", "door_h"], gap: ["gap10", "rail_w", "rail_e"], ice: ["ice0"], snow: ["snow0"], ball: ["floor0", "ball3"], exit: ["exit0"] };
+  const LEGEND = { dragonfly: ["floor0", "dragonfly_sit2"], water: ["water0"], lilypad: ["water0", "lilypad0"], reeds: ["floor0", "reeds0"], frog: ["frog_jump0"], crate: ["floor0", "crate"], door: ["floor0", "rail_h", "door_h"], gap: ["gap10", "rail_w", "rail_e"], ice: ["ice0"], snow: ["snow0"], ball: ["floor0", "ball3"], exit: ["exit0"] };
   function drawLegend() {
     document.querySelectorAll("canvas[data-piece]").forEach(cv => {
       const g = cv.getContext("2d"); g.clearRect(0, 0, 8, 8);

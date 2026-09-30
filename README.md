@@ -35,8 +35,11 @@ Edit it at 1:1 in any pixel editor (Aseprite, Piskel, GIMP, …), save, and refr
 | 5–7 | squirrel facing down, sideways (right; left is mirrored) and up: frame 0 standing, 1–3 running |
 | 8 | `water0`–`water3` (animation frames), `splash0`–`splash3` (ripple frames), `lilypad0`–`lilypad1`, `lilyleaves0`–`lilyleaves1`, `lilyflower` |
 | 9 | `reeds0`–`reeds3`, `frog_jump0`–`frog_jump3` (sit, crouch, in the air, landing), `frog_swim0`–`frog_swim3` (all facing right) |
+| 10 | `waterB0`–`waterB3` (second water animation), `dragonfly_sit0`–`dragonfly_sit3` (perched), `dragonfly_fly0`–`dragonfly_fly3` (flying); dragonfly directions are 0 up, 1 right, 2 down, 3 left |
 
-Rows 10–15 and the other empty slots are free. Water, splash and frog frames are animation frames, not random variants.
+Rows 11–15 and the other empty slots are free. Water, splash, frog and dragonfly frames are animation frames, not random variants.
+Each water tile picks one of the two water animations (`WATER_SETS` in `src/sprites.js`) and may be mirrored, so the
+surface doesn't repeat. The back and front halves of a reed tile pick their variants independently.
 Animation speeds are at the top of `src/sprites.js` (`WATER_FRAME_MS`, `SPLASH_FRAME_MS`).
 Anything in the water (the squirrel, frogs) is drawn with its lower part darkened and see-through; reeds are drawn
 twice, shifted up behind whatever stands in them and shifted down in front of it. Numbered names are random variants of one sprite:
@@ -70,10 +73,16 @@ An object standing on something other than plain floor records the tile undernea
 ## NPCs
 
 The world file lists NPCs as `"npcs": [{ "type": "frog", "x": 42, "y": 44 }]` (world tile coordinates); place them
-with the Frog tool in the designer. Frogs are cautious: they hop between spots near water (2–4 tiles per jump on land,
-resting in between; swimming without pause in water), climb onto big lily pads, jump into the nearest water when you
-come within 5 tiles on land, and swim away (or dive) when you come within 2 tiles in the water. Their tuning values
-are in the `FROG` object in `src/npc.js`; a new kind of NPC is a new entry in `BEHAVIOURS` there.
+with the Frog and Dragonfly tools in the designer (room mode; click an NPC again to remove it).
+
+- Frogs are passive: they hop between spots near water (2–4 tiles per jump on land) and swim a little, with long rests
+  in between. They climb onto big lily pads, jump into the nearest water when you come within 6 tiles on land, and
+  swim away (or dive) when you come within 3 tiles in the water. Tuning: the `FROG` object in `src/npc.js`.
+- Dragonflies remember their home tile (put them on reeds). They sit near the top of it for a while, then pick a
+  short line nearby that doesn't cross a wall, fly to its start, dart back and forth along it 1–3 times, and return
+  to sit. They fly above everything, including the reeds. Tuning: the `DFLY` object in `src/npc.js`.
+
+A new kind of NPC is a new entry in `BEHAVIOURS` there.
 
 ## Water
 
