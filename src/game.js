@@ -11,8 +11,19 @@
   const C = { line: css("--line"), accent: css("--accent"), player: css("--player"), panel: css("--panel") };
 
   // ---------- the world ----------
+  // If data/world.js is missing or malformed, say so on screen instead of showing a blank page.
+  function problem(msg) {
+    $("win").hidden = false;
+    $("win").querySelector("h2").textContent = "Can't load the world";
+    $("winStats").textContent = msg;
+    $("winAgain").hidden = true;
+  }
+  if (typeof WORLD_DATA === "undefined") {
+    problem("data/world.js has to start with  const WORLD_DATA =  followed by the world. Use Download world.js in the designer, or paste Copy world over the whole file.");
+    return;
+  }
   const grid = CP.parse(WORLD_DATA);
-  if (grid.W !== GW || grid.H !== GW) throw new Error(`data/world.js must be ${GW}×${GW} tiles`);
+  if (grid.W !== GW || grid.H !== GW) { problem(`The world in data/world.js is ${grid.W}×${grid.H} tiles; it has to be ${GW}×${GW}.`); return; }
   const L = E.build(GW, GW, grid.terr, grid.obj);
   const INITIAL = L.obj;
   const gidx = (gx, gy) => gy * GW + gx;
