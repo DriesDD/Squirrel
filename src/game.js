@@ -219,9 +219,12 @@
     });
   }
 
-  let last = performance.now();
+  let last = performance.now(), fpsFrames = 0, fpsFrom = last;
   function frame(now) {
     const dt = now - last; last = now;
+    // frames per second, for testing: counted over half-second windows
+    fpsFrames++;
+    if (now - fpsFrom >= 500) { $("fps").textContent = Math.round(fpsFrames * 1000 / (now - fpsFrom)); fpsFrames = 0; fpsFrom = now; }
     if (held >= 0 && now >= nextRepeat && now >= busyUntil) { move(held); nextRepeat = now + 20; }
     if (fade > 0) { fade = Math.max(0, fade - dt / 180); if (fade === 0) fadeFrom = null; }
     NPC.update(now);

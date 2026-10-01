@@ -36,8 +36,11 @@ const SPRITE_MAP = {   // name: [column, row] of the 8x8 slot
   flowerpatch0: [4, 11], flowerpatch1: [5, 11], flowerpatch2: [6, 11], flowerpatch3: [7, 11],
   undergrowth_tuft0: [8, 11], undergrowth_tuft1: [9, 11], undergrowth_tuft2: [10, 11], undergrowth_tuft3: [11, 11],
   flowerpatch_tuft0: [12, 11], flowerpatch_tuft1: [13, 11], flowerpatch_tuft2: [14, 11], flowerpatch_tuft3: [15, 11],
-  // row 12: logs (log_h lies left-right, log_v lies up-down)
+  // row 12: logs (log_h lies left-right, log_v lies up-down); edge fringes of undergrowth and flower patches:
+  // leaves at the bottom of the sprite, drawn over the tile above a patch (and turned for the other sides)
   log_h: [0, 12], log_v: [1, 12],
+  undergrowth_edge0: [2, 12], undergrowth_edge1: [3, 12], undergrowth_edge2: [4, 12],
+  flowerpatch_edge0: [5, 12], flowerpatch_edge1: [6, 12], flowerpatch_edge2: [7, 12],
 };
 const WATER_SETS = ["water", "waterB"];   // water animations; each water tile uses one, possibly mirrored
 const WATER_FRAME_MS = 320;   // water animation speed
@@ -140,7 +143,25 @@ function SPRITES() {
     const back = layer === "back";   // the two copies use independently chosen variants
     const t = L.terr[i] === ";" ? ";" : baseOf(L, i);
     if (t === ";") draw(ctx, variant("reeds", x, y, back ? 0 : 1), x * 8, y * 8 + (back ? -3 : 2), (hash(x, y, back ? 5 : 6) & 1) === 1);
-    else if (t === "," || t === ":") draw(ctx, variant(t === "," ? "undergrowth_tuft" : "flowerpatch_tuft", x, y, back ? 2 : 3), x * 8, y * 8 + (back ? TUFT_BACK : TUFT_FRONT), (hash(x, y, back ? 8 : 9) & 1) === 1);
+    else if (t === "," || t === ":") {
+      const set = t === "," ? "undergrowth" : "flowerpatch";
+      if (back) edges(ctx, L, i, x, y, set);
+      draw(ctx, variant(set + "_tuft", x, y, back ? 2 : 3), x * 8, y * 8 + (back ? TUFT_BACK : TUFT_FRONT), (hash(x, y, back ? 8 : 9) & 1) === 1);
+    }
+  }
+  // leaves creeping over the edge onto neighbouring tiles that aren't undergrowth (or walls), so a patch
+  // doesn't end in a straight line
+  const leafy = t => t === "," || t === ":";
+  function edges(ctx, L, i, x, y, set) {
+    const gx = i % L.W, gy = (i / L.W) | 0;
+    for (let d = 0; d < 4; d++) {
+      const nx = gx + [0, 1, 0, -1][d], ny = gy + [-1, 0, 1, 0][d];
+      if (nx < 0 || ny < 0 || nx >= L.W || ny >= L.H) continue;
+      const n = ny * L.W + nx, nt = L.terr[n];
+      if (nt === "w" || nt === "o" || leafy(nt) || leafy(baseOf(L, n))) continue;
+      const vx = x + nx - gx, vy = y + ny - gy;
+      drawTurned(ctx, variant(set + "_edge", vx, vy, 4 + d), vx * 8, vy * 8, d, (hash(x, y, 20 + d) & 1) === 1);
+    }
   }
   // splash ripple that started `ms` milliseconds ago; returns false once it has finished
   function splash(ctx, fx, fy, ms) {

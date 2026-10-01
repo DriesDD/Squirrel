@@ -37,7 +37,7 @@ Edit it at 1:1 in any pixel editor (Aseprite, Piskel, GIMP, …), save, and refr
 | 9 | `reeds0`–`reeds3`, `frog_jump0`–`frog_jump3` (sit, crouch, in the air, landing), `frog_swim0`–`frog_swim3` (all facing right) |
 | 10 | `waterB0`–`waterB3` (second water animation), `dragonfly_sit0`–`dragonfly_sit3` (perched), `dragonfly_fly0`–`dragonfly_fly3` (flying); dragonfly directions are 0 up, 1 right, 2 down, 3 left |
 | 11 | `undergrowth0`–`undergrowth3` (creeping jenny ground), `flowerpatch0`–`flowerpatch3`, `undergrowth_tuft0`–`undergrowth_tuft3` and `flowerpatch_tuft0`–`flowerpatch_tuft3` (short leaves drawn behind and in front of whatever stands on the tile) |
-| 12 | `log_h` (lying left-right), `log_v` (lying up-down) |
+| 12 | `log_h` (lying left-right), `log_v` (lying up-down), `undergrowth_edge0`–`undergrowth_edge2` and `flowerpatch_edge0`–`flowerpatch_edge2` (leaves creeping over the tile above a patch; turned for the other sides) |
 
 Rows 13–15 and the other empty slots are free. Water, splash, frog and dragonfly frames are animation frames, not random variants.
 Each water tile picks one of the two water animations (`WATER_SETS` in `src/sprites.js`) and may be mirrored, so the

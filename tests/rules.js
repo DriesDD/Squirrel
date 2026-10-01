@@ -92,3 +92,5 @@ ts('▯ log sinks in water and floats', ['@▯≈≈'], [R, R], '__@≈ splashes
 ts('crate pushes a log line it can roll', ['@c▯_'], [R], '_@c▯ splashes=');
 ts('log blocks a line it cannot roll with', ['@c▭_'], [R], '@c▭_ splashes=');
 ts('undergrowth is like floor', ['@c,:'], [R, R], '__@c splashes=');
+ts('two ▯ logs roll together like crates', ['@▯▯__'], [R], '_@▯▯_ splashes=');
+ts('▯ log pushed into another stops at a wall', ['@▯▯w'], [R], '@▯▯w splashes=');

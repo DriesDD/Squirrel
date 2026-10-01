@@ -41,7 +41,7 @@ function ENGINE() {
   const SUNK_CODE = { 1: 16, [LOG_H]: 32, [LOG_V]: 48 };   // what stays in the water when a piece sinks
   const kindOf = v => v & KIND_MASK;
   const PILE = 4, SWALL = 9;
-  const snowy = k => k >= 4;
+  const snowy = k => k >= 4 && k <= 9;   // snow pile, snowballs and snow wall
   const snowVal = k => k === PILE ? 1 : k - 4;
   const ball = s => 4 + Math.min(5, s);
   const small = k => k === 4 || k === 5 || k === 6;
