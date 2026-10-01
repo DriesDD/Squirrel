@@ -7,8 +7,8 @@
   ["gate", "player"].forEach(k => C[k] = css("--" + k));
   const TS = 8;                    // one 8x8 sprite per tile; the canvas is scaled up with crisp pixels
   const SP = SPRITES();
-  const DEF_UNDER = { c: "_", "=": "-", "║": "|", "*": "_", "1": "_", "2": "_", "3": "_", "4": "_", "5": "_" };
-  const TERRAIN = new Set(["w", "_", "-", "|", "+", "o", "s", "f", "~", "h", "v", "x", "e", "≈", "@", "%", "&", ";"]);
+  const DEF_UNDER = { c: "_", "=": "-", "║": "|", "*": "_", "1": "_", "2": "_", "3": "_", "4": "_", "5": "_", "▭": "_", "▯": "_" };
+  const TERRAIN = new Set(["w", "_", "-", "|", "+", "o", "s", "f", "~", "h", "v", "x", "e", "≈", "@", "%", "&", ";", ",", ":"]);
   const OVERLAY = E.OVERLAY_BASE;   // lily pads and reeds sit on another tile (their "base")
   const CP = COMPONENTS(E);
   const ICEC = { "~": 1, "h": 1, "v": 1, "x": 1 };
@@ -19,6 +19,8 @@
     { ch: "w", name: "Wall", key: "w" },
     { ch: "_", name: "Floor", key: "_" },
     { ch: "c", name: "Crate", key: "c" },
+    { ch: "▭", name: "H log", key: "n" },
+    { ch: "▯", name: "V log", key: "m" },
     { ch: "o", name: "Gap wall", key: "o" },
     { ch: "-", name: "H rail", key: "-" },
     { ch: "|", name: "V rail", key: "|" },
@@ -33,6 +35,8 @@
     { ch: "%", name: "Lily leaves", key: "k" },
     { ch: "&", name: "Lily flower", key: "y" },
     { ch: ";", name: "Reeds", key: "r" },
+    { ch: ",", name: "Under\u00adgrowth", key: "u" },
+    { ch: ":", name: "Flower patch", key: "j" },
     { ch: "s", name: "Start", roomName: "Test start", key: "s" },
     { ch: "f", name: "Finish", roomName: "Test finish", key: "f" },
     { ch: "p", name: "Player start", key: "p", room: true },
@@ -112,8 +116,8 @@
       if (obj === "=" && !nr.h) ed.obj[i] = "";
       if (obj === "║" && !nr.v) ed.obj[i] = "";
       if (obj === "*") ed.obj[i] = "";
-    } else if (t === "c") {
-      ed.obj[i] = "c";
+    } else if (t === "c" || t === "▭" || t === "▯") {
+      ed.obj[i] = t;
       if (!E.CRATE_OK[terr]) ed.terr[i] = "_";
     } else if (t === "*") {
       ed.obj[i] = "*"; ed.terr[i] = "_";
@@ -121,6 +125,9 @@
       if (/^[1-5]$/.test(obj)) { if (click) ed.obj[i] = String(obj === "5" ? 1 : +obj + 1); }
       else ed.obj[i] = "1";
       if (!E.CRATE_OK[terr]) ed.terr[i] = "_";
+    } else if (t === "," || t === ":") {
+      ed.terr[i] = t;
+      if (obj === "=" || obj === "║") ed.obj[i] = "";
     } else if (t === "≈") {
       ed.terr[i] = "≈"; ed.obj[i] = "";
     } else if (OVERLAY[t]) {
@@ -275,7 +282,7 @@
   function rotate() {
     pushHistory();
     const m = blank(ed.H, ed.W); m.name = ed.name;
-    const swap = { "-": "|", "|": "-", "=": "║", "║": "=", "h": "v", "v": "h" };
+    const swap = { "-": "|", "|": "-", "=": "║", "║": "=", "h": "v", "v": "h", "▭": "▯", "▯": "▭" };
     for (let y = 0; y < ed.H; y++) for (let x = 0; x < ed.W; x++) {
       const i = idx(x, y), nx = ed.H - 1 - y, ny = x, j = ny * m.W + nx;
       m.terr[j] = swap[ed.terr[i]] || ed.terr[i];
@@ -592,7 +599,7 @@
   function hashStr(s) { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return (h >>> 0).toString(16).padStart(8, "0").slice(0, 6); }
   function componentData() {
     const { map, under } = toMap(ed);
-    const parts = [...new Set(ed.obj.concat(ed.terr).filter(ch => "c=║-|+o~hvx*12345".includes(ch) && ch))].sort().join("");
+    const parts = [...new Set(ed.obj.concat(ed.terr).filter(ch => "c=║-|+o~hvx*12345▭▯".includes(ch) && ch))].sort().join("");
     const r = lastResult;
     const meta = r ? {
       dir: r.dir, rating: r.rating,
@@ -773,8 +780,8 @@
   // world overview: 2 px per tile, room outlines, current room highlighted
   const ov = $("overview"), octx = ov.getContext("2d");
   const ovBuf = document.createElement("canvas"); ovBuf.width = ovBuf.height = GW;
-  const OVT = { w: "#7b5a3c", o: "#7b5a3c", "~": "#9cc9d8", h: "#9cc9d8", v: "#9cc9d8", x: "#9cc9d8", e: "#7fd18b", "-": "#56646a", "|": "#56646a", "+": "#56646a", "≈": "#1d4a66", "@": "#4f8f3a", "%": "#3f7a36", "&": "#f0a8bf", ";": "#6f9a3c" };
-  const OVO = { c: "#c28b55", "=": "#9fb3c8", "║": "#9fb3c8", "*": "#dfe8eb", "1": "#ffffff", "2": "#ffffff", "3": "#ffffff", "4": "#ffffff", "5": "#e6eef0" };
+  const OVT = { w: "#7b5a3c", o: "#7b5a3c", "~": "#9cc9d8", h: "#9cc9d8", v: "#9cc9d8", x: "#9cc9d8", e: "#7fd18b", "-": "#56646a", "|": "#56646a", "+": "#56646a", "≈": "#1d4a66", "@": "#4f8f3a", "%": "#3f7a36", "&": "#f0a8bf", ";": "#6f9a3c", ",": "#5e9a32", ":": "#a9b83a" };
+  const OVO = { "▭": "#6b4428", "▯": "#6b4428", c: "#c28b55", "=": "#9fb3c8", "║": "#9fb3c8", "*": "#dfe8eb", "1": "#ffffff", "2": "#ffffff", "3": "#ffffff", "4": "#ffffff", "5": "#e6eef0" };
   function drawOverview() {
     if (!world) return;
     const b = ovBuf.getContext("2d"), img = b.createImageData(GW, GW);

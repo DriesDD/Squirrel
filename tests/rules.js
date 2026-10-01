@@ -1,5 +1,5 @@
 const E = require('../src/engine.js')();
-const DEF = { c: '_', '=': '-', '║': '|', '*': '_', '1':'_','2':'_','3':'_','4':'_','5':'_' };
+const DEF = { c: '_', '=': '-', '║': '|', '*': '_', '1':'_','2':'_','3':'_','4':'_','5':'_','▭':'_','▯':'_' };
 function lvl(lines, under = {}) {
   const H = lines.length, W = Math.max(...lines.map(l => [...l].length)); const terr = [], obj = [];
   lines.forEach((l, y) => { const a = [...l]; for (let x = 0; x < W; x++) { const ch = a[x] || 'w'; if (E.KIND[ch]) { obj.push(ch); terr.push(under[x + ',' + y] || DEF[ch]); } else { obj.push(''); terr.push(ch); } } });
@@ -83,3 +83,12 @@ ts('crate slides off ice into water', ['@c~~≈≈'], [R], '_@~~#≈ splashes=4'
 ts('door cannot enter water', ['@=≈'], [R], '@=≈ splashes=');
 ts('crate pushed onto a big lily pad stays on it', ['@c@≈'], [R], '_@c≈ splashes=');
 ts('snowball pushed onto a big lily pad', ['@3@≈'], [R], '_@3≈ splashes=');
+// ---- logs (▭ lies left-right and rolls up/down, ▯ lies up-down and rolls left/right) ----
+ts('▯ log rolls right', ['@▯__'], [R], '_@▯_ splashes=');
+ts('▭ log cannot be pushed right', ['@▭__'], [R], '@▭__ splashes=');
+ts('▭ log rolls down', ['@', '▭', '_', '_'], [D], '_@▭_ splashes=');
+ts('▯ log cannot be pushed down', ['@', '▯', '_'], [D], '@▯_ splashes=');
+ts('▯ log sinks in water and floats', ['@▯≈≈'], [R, R], '__@≈ splashes=2');
+ts('crate pushes a log line it can roll', ['@c▯_'], [R], '_@c▯ splashes=');
+ts('log blocks a line it cannot roll with', ['@c▭_'], [R], '@c▭_ splashes=');
+ts('undergrowth is like floor', ['@c,:'], [R, R], '__@c splashes=');

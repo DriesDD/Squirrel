@@ -36,13 +36,16 @@ Edit it at 1:1 in any pixel editor (Aseprite, Piskel, GIMP, …), save, and refr
 | 8 | `water0`–`water3` (animation frames), `splash0`–`splash3` (ripple frames), `lilypad0`–`lilypad1`, `lilyleaves0`–`lilyleaves1`, `lilyflower` |
 | 9 | `reeds0`–`reeds3`, `frog_jump0`–`frog_jump3` (sit, crouch, in the air, landing), `frog_swim0`–`frog_swim3` (all facing right) |
 | 10 | `waterB0`–`waterB3` (second water animation), `dragonfly_sit0`–`dragonfly_sit3` (perched), `dragonfly_fly0`–`dragonfly_fly3` (flying); dragonfly directions are 0 up, 1 right, 2 down, 3 left |
+| 11 | `undergrowth0`–`undergrowth3` (creeping jenny ground), `flowerpatch0`–`flowerpatch3`, `undergrowth_tuft0`–`undergrowth_tuft3` and `flowerpatch_tuft0`–`flowerpatch_tuft3` (short leaves drawn behind and in front of whatever stands on the tile) |
+| 12 | `log_h` (lying left-right), `log_v` (lying up-down) |
 
-Rows 11–15 and the other empty slots are free. Water, splash, frog and dragonfly frames are animation frames, not random variants.
+Rows 13–15 and the other empty slots are free. Water, splash, frog and dragonfly frames are animation frames, not random variants.
 Each water tile picks one of the two water animations (`WATER_SETS` in `src/sprites.js`) and may be mirrored, so the
 surface doesn't repeat. The back and front halves of a reed tile pick their variants independently.
 Animation speeds are at the top of `src/sprites.js` (`WATER_FRAME_MS`, `SPLASH_FRAME_MS`).
 Anything in the water (the squirrel, frogs) is drawn with its lower part darkened and see-through; reeds are drawn
-twice, shifted up behind whatever stands in them and shifted down in front of it. Numbered names are random variants of one sprite:
+twice, shifted up behind whatever stands in them and shifted down in front of it; undergrowth and flower patches
+do the same with their tufts (offsets `TUFT_BACK` and `TUFT_FRONT` in `src/sprites.js`), so they hide only the feet. Numbered names are random variants of one sprite:
 to add a variant, draw it in a free slot and add e.g. `floor8: [col, row]` to `SPRITE_MAP`.
 
 ## Project layout
@@ -63,11 +66,14 @@ to add a variant, draw it in a free slot and add e.g. `floor8: [col, row]` to `S
 ## Map characters
 
 Terrain: `w` wall · `_` floor · `o` gapped wall · `-` `|` `+` rails · `~` ice · `h` `v` `x` ice with rails ·
-`≈` water · `e` exit · `s` `f` test start/finish (components and route checks only).
+`≈` water · `,` undergrowth · `:` flower patch (both plain ground) · `e` exit · `s` `f` test start/finish (components and route checks only).
 Overlays, drawn on another tile (water by default, floor for reeds; `under` records any other): `@` big lily pad
 (walkable, and crates and snowballs can be pushed onto it) · `%` small lily leaves (blocks) · `&` lily flower (blocks) · `;` reeds (walk through; they follow the rules
 of the tile under them).
-Objects: `c` crate · `=` `║` sliding doors · `*` snow · `1`–`5` snowball sizes (5 is a snow wall).
+Objects: `c` crate · `▭` `▯` logs · `=` `║` sliding doors · `*` snow · `1`–`5` snowball sizes (5 is a snow wall).
+A log is a crate that only rolls across its length: `▭` (H log, lying left-right) rolls up and down, `▯` (V log,
+lying up-down) rolls left and right; pushed along its length it doesn't budge and blocks the line behind it. In
+every other way, including sinking halfway into water and becoming ground, it acts like a crate.
 An object standing on something other than plain floor records the tile underneath in `under`.
 
 ## NPCs

@@ -5,12 +5,15 @@
 //           ~ ice · h v x ice with horizontal / vertical / crossing rail · e exit · ≈ water
 // Overlays (drawn on top of a base tile; the base comes from `under`, default in OVERLAY_BASE):
 //           @ big lily pad (walkable) · % small lily leaves (blocks) · & lily flower (blocks) · ; reeds (walk through)
+//           , undergrowth · : flower patch (both plain ground, like floor)
 // Objects:  c crate · = horizontal door · ║ vertical door · * snow pile · 1-5 snowball (5 = snow wall)
-//           A crate pushed into water sinks and stays there as a sunk crate: bit 16 (SUNK) of the object code,
-//           so a cell can hold a sunk crate and another object on top (code = SUNK | kind).
+//           ▭ log lying left-right (rolls only up/down) · ▯ log lying up-down (rolls only left/right)
+//           A crate or log pushed into water sinks halfway and stays there: bits 16-32 of the object code
+//           (16 crate, 32 ▭ log, 48 ▯ log; SUNK = 48 is the mask), so a cell can hold a sunk piece and another
+//           object on top (code = sunk bits | kind).
 //
 // Rules summary
-// - Pushing: crates, doors (along their rail), snow. A push moves the whole line one tile; at most 5 heavy
+// - Pushing: crates, logs (only across their length), doors (along their rail), snow. A push moves the whole line one tile; at most 5 heavy
 //   pieces (crates and snowballs of size 3-4) per line.
 // - Snow pile: pushed, it becomes a size-1 ball one tile further and leaves plain floor behind.
 // - Snowballs: 1-2 are fragile (destroyed when they run into anything that isn't snow), 3-4 act like crates,
@@ -21,26 +24,28 @@
 //   and they keep sliding together. After a normal push, only the front piece of the line gets momentum.
 // - Water: the player who walks or slides into water splashes in, then walks back out to the tile they came from
 //   (the step reports `splash`). A snowball (or snow pile) pushed into water sinks and is gone; a crate sinks and
-//   becomes a sunk crate that works like floor: walk on it, push crates and snowballs onto it. Doors can't enter
+//   becomes a sunk crate that works like floor (logs too): walk on it, push crates and snowballs onto it. Doors can't enter
 //   water (no rails). Each of these splashes is listed in the step's `splashes`. Reeds take the rules of the tile under them.
 function ENGINE() {
   const DX = [0, 1, 0, -1], DY = [-1, 0, 1, 0];
-  const WALK = { "_": 1, "-": 1, "|": 1, "+": 1, "s": 1, "f": 1, "e": 1, "~": 1, "h": 1, "v": 1, "x": 1, "@": 1 };   // e = level exit, @ = big lily pad
+  const WALK = { "_": 1, "-": 1, "|": 1, "+": 1, "s": 1, "f": 1, "e": 1, "~": 1, "h": 1, "v": 1, "x": 1, "@": 1, ",": 1, ":": 1 };   // e = level exit, @ = big lily pad, , : undergrowth
   const WATER = "≈";
   const OVERLAY_BASE = { ";": "_", "@": WATER, "%": WATER, "&": WATER };   // default tile under each overlay
-  const CRATE_OK = { "_": 1, "-": 1, "|": 1, "+": 1, "~": 1, "h": 1, "v": 1, "x": 1, "@": 1 };   // @ = big lily pad
+  const CRATE_OK = { "_": 1, "-": 1, "|": 1, "+": 1, "~": 1, "h": 1, "v": 1, "x": 1, "@": 1, ",": 1, ":": 1 };   // @ = big lily pad, , : undergrowth
   const ICE = { "~": 1, "h": 1, "v": 1, "x": 1 };
-  const KIND = { "c": 1, "=": 2, "║": 3, "*": 4, "1": 5, "2": 6, "3": 7, "4": 8, "5": 9 };
-  const CH = ["", "c", "=", "║", "*", "1", "2", "3", "4", "5"];
+  const KIND = { "c": 1, "=": 2, "║": 3, "*": 4, "1": 5, "2": 6, "3": 7, "4": 8, "5": 9, "▭": 10, "▯": 11 };
+  const CH = ["", "c", "=", "║", "*", "1", "2", "3", "4", "5", "▭", "▯"];
+  const LOG_H = 10, LOG_V = 11;
   const MAX_CRATES = 5;
-  const SUNK = 16, KIND_MASK = 15;
+  const SUNK = 48, KIND_MASK = 15;
+  const SUNK_CODE = { 1: 16, [LOG_H]: 32, [LOG_V]: 48 };   // what stays in the water when a piece sinks
   const kindOf = v => v & KIND_MASK;
   const PILE = 4, SWALL = 9;
   const snowy = k => k >= 4;
   const snowVal = k => k === PILE ? 1 : k - 4;
   const ball = s => 4 + Math.min(5, s);
   const small = k => k === 4 || k === 5 || k === 6;
-  const heavy = k => k === 1 || k === 7 || k === 8;
+  const heavy = k => k === 1 || k === 7 || k === 8 || k === LOG_H || k === LOG_V;
   const big = k => k === 7 || k === 8;
 
   // terr: tile characters; objCh: object characters; base (optional): tile under an overlay ("" = default).
@@ -91,8 +96,9 @@ function ENGINE() {
   const openWater = (L, o, i) => L.water[i] === 1 && !(o[i] & SUNK);
   const standable = (L, o, i) => !!WALK[L.eff[i]] || !!(o[i] & SUNK);
   // crates and snow sink when they are pushed or slide into open water
-  const sinks = k => k === 1 || k === 4 || k === 5 || k === 6 || k === 7 || k === 8;
-  const perpendicular = (k, d) => (k === 2 && (d & 1) === 0) || (k === 3 && (d & 1) === 1);
+  const sinks = k => k === 1 || k === 4 || k === 5 || k === 6 || k === 7 || k === 8 || k === LOG_H || k === LOG_V;
+  // pieces that can't move in direction d: doors only slide along their rail, logs only roll across their length
+  const perpendicular = (k, d) => ((k === 2 || k === LOG_V) && (d & 1) === 0) || ((k === 3 || k === LOG_H) && (d & 1) === 1);
 
   // ---- mutable simulation state ----
   // S.o = objects. When animating, S.tr keeps a timeline: every piece is an entity with keyframes [time, cell]
@@ -121,19 +127,19 @@ function ENGINE() {
     }
     S.o[b] = (S.o[b] & SUNK) | k; S.o[a] &= SUNK; S.changed = true;
   }
-  // The piece at a goes into open water at b during t..t+1 and splashes at t+1: a crate stays as a sunk crate
-  // (its animation entity turns into code SUNK), anything else is gone.
+  // The piece at a goes into open water at b during t..t+1 and splashes at t+1: a crate or log stays, sunk
+  // halfway (its animation entity turns into the sunk code), anything else is gone.
   function sink(S, a, b, t) {
-    const k = kindOf(S.o[a]);
+    const k = kindOf(S.o[a]), sc = SUNK_CODE[k] || 0;
     S.o[a] &= SUNK; S.changed = true;
-    if (k === 1) S.o[b] |= SUNK;
+    if (sc) S.o[b] |= sc;
     S.splashes.push({ cell: b, t: t + 1 });
     if (S.tr) {
       const id = S.tr.id[a], e = S.tr.ents[id];
       hold(e, t, a); e.frames.push([t + 1, b]);
       if (k === PILE) e.ks.push([t, ball(1)]);
       S.tr.id[a] = -1;
-      if (k === 1) { e.ks.push([t + 1, SUNK]); S.tr.id[b] = id; } else e.dead = t + 1;
+      if (sc) { e.ks.push([t + 1, sc]); S.tr.id[b] = id; } else e.dead = t + 1;
     }
   }
   function pmove(S, a, b, t) { if (S.tr) { const e = S.tr.player; hold(e, t, a); e.frames.push([t + 1, b]); } }
@@ -325,12 +331,12 @@ function ENGINE() {
   // ---------- solver ----------
   function encode(obj, p) {
     let s = String.fromCharCode(p + 1);
-    for (let i = 0; i < obj.length; i++) if (obj[i]) s += String.fromCharCode(i * 32 + obj[i]);   // up to 2047 cells
+    for (let i = 0; i < obj.length; i++) if (obj[i]) s += String.fromCharCode(i * 64 + obj[i]);   // up to 1023 cells
     return s;
   }
   function decode(key, N) {
     const o = new Uint8Array(N);
-    for (let j = 1; j < key.length; j++) { const c = key.charCodeAt(j); o[c >> 5] = c & 31; }
+    for (let j = 1; j < key.length; j++) { const c = key.charCodeAt(j); o[c >> 6] = c & 63; }
     return o;
   }
 

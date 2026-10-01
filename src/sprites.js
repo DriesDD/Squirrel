@@ -30,6 +30,14 @@ const SPRITE_MAP = {   // name: [column, row] of the 8x8 slot
   waterB0: [0, 10], waterB1: [1, 10], waterB2: [2, 10], waterB3: [3, 10],
   dragonfly_sit0: [4, 10], dragonfly_sit1: [5, 10], dragonfly_sit2: [6, 10], dragonfly_sit3: [7, 10],
   dragonfly_fly0: [8, 10], dragonfly_fly1: [9, 10], dragonfly_fly2: [10, 10], dragonfly_fly3: [11, 10],
+  // row 11: undergrowth (creeping jenny) and flower patch ground tiles, and their short tufts drawn behind and
+  // in front of whatever stands on them
+  undergrowth0: [0, 11], undergrowth1: [1, 11], undergrowth2: [2, 11], undergrowth3: [3, 11],
+  flowerpatch0: [4, 11], flowerpatch1: [5, 11], flowerpatch2: [6, 11], flowerpatch3: [7, 11],
+  undergrowth_tuft0: [8, 11], undergrowth_tuft1: [9, 11], undergrowth_tuft2: [10, 11], undergrowth_tuft3: [11, 11],
+  flowerpatch_tuft0: [12, 11], flowerpatch_tuft1: [13, 11], flowerpatch_tuft2: [14, 11], flowerpatch_tuft3: [15, 11],
+  // row 12: logs (log_h lies left-right, log_v lies up-down)
+  log_h: [0, 12], log_v: [1, 12],
 };
 const WATER_SETS = ["water", "waterB"];   // water animations; each water tile uses one, possibly mirrored
 const WATER_FRAME_MS = 320;   // water animation speed
@@ -114,7 +122,7 @@ function SPRITES() {
       const set = WATER_SETS[hash(x, y, 11) % WATER_SETS.length];
       draw(ctx, set + (Math.floor(opts.now / WATER_FRAME_MS) % 4), X, Y, (hash(x, y, 13) & 1) === 1);
     } else {
-      draw(ctx, variant(b === "e" ? "exit" : L.ice[i] ? "ice" : "floor", x, y), X, Y, flip);
+      draw(ctx, variant(b === "e" ? "exit" : b === "," ? "undergrowth" : b === ":" ? "flowerpatch" : L.ice[i] ? "ice" : "floor", x, y), X, Y, flip);
       if (L.hAx[i] && L.vAx[i]) draw(ctx, "rail_x", X, Y);
       else if (L.hAx[i]) draw(ctx, "rail_h", X, Y);
       else if (L.vAx[i]) draw(ctx, "rail_v", X, Y);
@@ -125,11 +133,14 @@ function SPRITES() {
     if (opts.ports && (t === "s" || t === "f")) draw(ctx, "port_" + t, X, Y);
   }
   // Reeds are drawn twice: shifted up behind whatever is on the tile, shifted down in front of it,
-  // so anything standing in them is half hidden. layer is "back" or "front".
+  // so anything standing in them is half hidden. Undergrowth and flower patches do the same with short tufts
+  // that only hide the base of what stands on them. layer is "back" or "front".
+  const TUFT_BACK = -2, TUFT_FRONT = 1;   // vertical offsets of the undergrowth tufts, in pixels
   function reeds(ctx, L, i, x, y, layer) {
-    if (L.terr[i] !== ";") return;
     const back = layer === "back";   // the two copies use independently chosen variants
-    draw(ctx, variant("reeds", x, y, back ? 0 : 1), x * 8, y * 8 + (back ? -3 : 2), (hash(x, y, back ? 5 : 6) & 1) === 1);
+    const t = L.terr[i] === ";" ? ";" : baseOf(L, i);
+    if (t === ";") draw(ctx, variant("reeds", x, y, back ? 0 : 1), x * 8, y * 8 + (back ? -3 : 2), (hash(x, y, back ? 5 : 6) & 1) === 1);
+    else if (t === "," || t === ":") draw(ctx, variant(t === "," ? "undergrowth_tuft" : "flowerpatch_tuft", x, y, back ? 2 : 3), x * 8, y * 8 + (back ? TUFT_BACK : TUFT_FRONT), (hash(x, y, back ? 8 : 9) & 1) === 1);
   }
   // splash ripple that started `ms` milliseconds ago; returns false once it has finished
   function splash(ctx, fx, fy, ms) {
@@ -139,18 +150,21 @@ function SPRITES() {
     return true;
   }
   // Object code k (see engine.js) at tile position (fx, fy), fractional while animating.
-  // Code 16 (SUNK) is a crate sunk in water, drawn half under; 16 + k is object k standing on a sunk crate.
-  const OBJ = { 1: "crate", 2: "door_h", 3: "door_v", 5: "ball1", 6: "ball2", 7: "ball3", 8: "ball4", 9: "snowwall" };
-  const SUNK = 16, SUNK_CUT = 4, SUNK_LOWER = 1;   // sunk crate: rows from SUNK_CUT down are under water, SUNK_LOWER px lower
+  // Codes 16 / 32 / 48 are a crate / ▭ log / ▯ log sunk in water, drawn half under; adding k means object k
+  // stands on top of it.
+  const OBJ = { 1: "crate", 2: "door_h", 3: "door_v", 5: "ball1", 6: "ball2", 7: "ball3", 8: "ball4", 9: "snowwall", 10: "log_h", 11: "log_v" };
+  const SUNK = 48, SUNK_SPRITE = { 16: "crate", 32: "log_h", 48: "log_v" };
+  const SUNK_CUT = 4, SUNK_LOWER = 1;   // sunk pieces: rows from SUNK_CUT down are under water, SUNK_LOWER px lower
   function obj(ctx, k, fx, fy) {
-    if (k & SUNK) { drawSubmerged(ctx, "crate", fx * 8, fy * 8, false, SUNK_CUT, SUNK_LOWER); k &= 15; if (!k) return; }
+    if (k & SUNK) { drawSubmerged(ctx, SUNK_SPRITE[k & SUNK], fx * 8, fy * 8, false, SUNK_CUT, SUNK_LOWER); k &= 15; if (!k) return; }
     if (k === 4) { const x = Math.round(fx), y = Math.round(fy); draw(ctx, variant("snow", x, y), fx * 8, fy * 8, (hash(x, y, 7) & 1) === 1); return; }
     draw(ctx, OBJ[k], fx * 8, fy * 8);
   }
   // Objects of one cell while a move animates: sunk crates as they were before the move (prev), the piece on
   // top from the current state unless it is moving (skip holds the cells of moving pieces, drawn separately).
   function cell(ctx, cur, prev, skip, g, x, y) {
-    if ((prev || cur)[g] & SUNK) obj(ctx, SUNK, x, y);
+    const s = (prev || cur)[g] & SUNK;
+    if (s) obj(ctx, s, x, y);
     const k = cur[g] & 15;
     if (k && !(skip && skip.has(g))) obj(ctx, k, x, y);
   }

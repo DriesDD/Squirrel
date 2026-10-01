@@ -1,7 +1,7 @@
 // Component helpers: read a component from its ASCII map and produce its 8 rotations/mirrors.
 function COMPONENTS(E) {
-  const DEF_UNDER = { c: "_", "=": "-", "║": "|", "*": "_", "1": "_", "2": "_", "3": "_", "4": "_", "5": "_" };
-  const SWAP = { "-": "|", "|": "-", "=": "║", "║": "=", "h": "v", "v": "h" };   // rotating 90° swaps axes
+  const DEF_UNDER = { c: "_", "=": "-", "║": "|", "*": "_", "1": "_", "2": "_", "3": "_", "4": "_", "5": "_", "▭": "_", "▯": "_" };
+  const SWAP = { "-": "|", "|": "-", "=": "║", "║": "=", "h": "v", "v": "h", "▭": "▯", "▯": "▭" };   // rotating 90° swaps axes
   // { map: [rows], under: {"x,y": tile under an object or overlay} } -> { W, H, terr[], obj[], base[] }
   // base[i] is the tile under an overlay (lily pads, reeds) when it isn't the default one; "" otherwise.
   function parse(c) {

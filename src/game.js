@@ -183,8 +183,8 @@
 
   // ---------- map of visited rooms ----------
   const mini = $("minimap"), mctx = mini.getContext("2d");
-  const MAPT = { w: "#7b5a3c", o: "#7b5a3c", "~": "#9cc9d8", h: "#9cc9d8", v: "#9cc9d8", x: "#9cc9d8", e: "#7fd18b", "≈": "#1d4a66", "@": "#4f8f3a", "%": "#3f7a36", "&": "#f0a8bf", ";": "#6f9a3c" };
-  const MAPO = { 16: "#8a6a45", 1: "#c28b55", 2: "#9fb3c8", 3: "#9fb3c8", 4: "#dfe8eb", 5: "#ffffff", 6: "#ffffff", 7: "#ffffff", 8: "#ffffff", 9: "#e6eef0" };
+  const MAPT = { w: "#7b5a3c", o: "#7b5a3c", "~": "#9cc9d8", h: "#9cc9d8", v: "#9cc9d8", x: "#9cc9d8", e: "#7fd18b", "≈": "#1d4a66", "@": "#4f8f3a", "%": "#3f7a36", "&": "#f0a8bf", ";": "#6f9a3c", ",": "#5e9a32", ":": "#a9b83a" };
+  const MAPO = { 16: "#8a6a45", 32: "#5a3f28", 48: "#5a3f28", 10: "#6b4428", 11: "#6b4428", 1: "#c28b55", 2: "#9fb3c8", 3: "#9fb3c8", 4: "#dfe8eb", 5: "#ffffff", 6: "#ffffff", 7: "#ffffff", 8: "#ffffff", 9: "#e6eef0" };
   function drawMini() {
     const s = mini.width / GW, all = $("reveal").checked;
     mctx.fillStyle = C.panel; mctx.fillRect(0, 0, mini.width, mini.height);
@@ -211,7 +211,7 @@
     $("steps").textContent = S.steps;
     $("undoBtn").disabled = !hist.length;
   }
-  const LEGEND = { dragonfly: ["floor0", "dragonfly_sit2"], water: ["water0"], lilypad: ["water0", "lilypad0"], reeds: ["floor0", "reeds0"], frog: ["frog_jump0"], crate: ["floor0", "crate"], door: ["floor0", "rail_h", "door_h"], gap: ["gap10", "rail_w", "rail_e"], ice: ["ice0"], snow: ["snow0"], ball: ["floor0", "ball3"], exit: ["exit0"] };
+  const LEGEND = { undergrowth: ["undergrowth0", "undergrowth_tuft0"], flowerpatch: ["flowerpatch0"], log: ["floor0", "log_v"], dragonfly: ["floor0", "dragonfly_sit2"], water: ["water0"], lilypad: ["water0", "lilypad0"], reeds: ["floor0", "reeds0"], frog: ["frog_jump0"], crate: ["floor0", "crate"], door: ["floor0", "rail_h", "door_h"], gap: ["gap10", "rail_w", "rail_e"], ice: ["ice0"], snow: ["snow0"], ball: ["floor0", "ball3"], exit: ["exit0"] };
   function drawLegend() {
     document.querySelectorAll("canvas[data-piece]").forEach(cv => {
       const g = cv.getContext("2d"); g.clearRect(0, 0, 8, 8);
